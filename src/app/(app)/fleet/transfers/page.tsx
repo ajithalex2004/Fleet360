@@ -7,7 +7,6 @@ import {
   Search,
   CheckCircle2,
   XCircle,
-  AlertTriangle,
   Clock,
   Car,
   MapPin,
@@ -21,6 +20,8 @@ import {
 } from 'lucide-react';
 import { VehicleRef } from '@/components/ui/EntityRef';
 
+import { FormAlert, FormField, FormFooter, PrimaryButton, SecondaryButton, SelectInput, TextAreaInput, TextInput } from '@/components/ui/form-kit';
+import { FormModal } from '@/components/ui/form-modal';
 interface Transfer {
   id: string;
   transferNo: string;
@@ -433,8 +434,6 @@ export default function TransfersPage() {
     }
   };
 
-  const inputCls =
-    'bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-xl px-4 py-2.5 text-[var(--text-main)] text-sm focus:border-orange-500/50 focus:outline-none w-full transition-colors';
   const labelCls = 'block text-xs font-medium text-[var(--text-muted)] mb-1.5';
 
   return (
@@ -466,11 +465,7 @@ export default function TransfersPage() {
       </div>
 
       {/* Error message */}
-      {error && (
-        <div className="bg-red-500/10 border border-red-500/30 text-red-400 px-4 py-3 rounded-xl text-sm flex items-center gap-2">
-          <AlertTriangle className="w-4 h-4 flex-shrink-0" /> {error}
-        </div>
-      )}
+      {error && <FormAlert>{error}</FormAlert>}
 
       {/* Filter and Search Bar */}
       <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-2xl p-4 flex flex-wrap gap-3 items-center justify-between shadow-sm">
@@ -738,324 +733,278 @@ export default function TransfersPage() {
 
       {/* New Transfer Modal */}
       {showModal && (
-        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto shadow-2xl">
-            <div className="flex items-center justify-between px-6 py-4 border-b border-[var(--border-subtle)]">
-              <div className="flex items-center gap-2">
-                <div className="w-8 h-8 rounded-lg bg-orange-500/10 flex items-center justify-center text-orange-400">
-                  <ArrowLeftRight className="w-4 h-4" />
-                </div>
-                <div>
-                  <h2 className="text-base font-semibold text-[var(--text-main)]">New Vehicle Transfer</h2>
-                  <p className="text-xs text-[var(--text-muted)]">
-                    Relocate a vehicle between branches with automatic branch & odometer update
-                  </p>
-                </div>
-              </div>
-              <button
-                onClick={() => setShowModal(false)}
-                className="text-[var(--text-muted)] hover:text-[var(--text-main)] transition-colors text-xl leading-none"
-              >
-                &times;
-              </button>
-            </div>
+        <FormModal
+          onClose={() => setShowModal(false)}
+          title="New Vehicle Transfer"
+          subtitle="Relocate a vehicle between branches with automatic branch & odometer update"
+          icon={ArrowLeftRight}
+          accent="amber"
+          size="lg"
+        >
+          <div className="space-y-5">
+            {formError && <FormAlert>{formError}</FormAlert>}
 
-            <div className="px-6 py-5 space-y-5">
-              {formError && (
-                <div className="bg-red-500/10 border border-red-500/30 text-red-400 px-4 py-3 rounded-xl text-xs flex items-center gap-2">
-                  <AlertTriangle className="w-4 h-4 flex-shrink-0" />
-                  <span>{formError}</span>
-                </div>
-              )}
-
-              {/* Vehicle Selection with Autopopulate */}
-              <div className="bg-[var(--bg-surface-hover)]/40 border border-[var(--border-subtle)] rounded-xl p-4 space-y-3">
-                <div className="flex items-center justify-between">
-                  <label className="text-xs font-bold text-orange-400 uppercase tracking-wider flex items-center gap-1.5">
-                    <Car className="w-4 h-4" /> Select Fleet Vehicle *
-                  </label>
-                  {selectedVehicleObj && (
-                    <span className="text-[11px] text-emerald-400 font-medium bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5 rounded-md">
-                      Auto-Populated Details
-                    </span>
-                  )}
-                </div>
-
-                <select
-                  value={formData.vehicleId}
-                  onChange={(e) => handleVehicleChange(e.target.value)}
-                  className={inputCls}
-                >
-                  <option value="">-- Choose a Vehicle (Plate / Code / Model) --</option>
-                  {vehicles.map((v) => {
-                    const plate = v.licensePlate || 'NO PLATE';
-                    const code = v.vehicleCode ? `(${v.vehicleCode})` : '';
-                    const desc = [v.make, v.model].filter(Boolean).join(' ') || 'Vehicle';
-                    const loc = v.branchName || v.currentLocation || 'Unassigned';
-                    return (
-                      <option key={v.id} value={v.id}>
-                        {plate} — {desc} {code} [Current: {loc}]
-                      </option>
-                    );
-                  })}
-                </select>
-
-                {/* Selected vehicle summary card */}
+            {/* Vehicle Selection with Autopopulate */}
+            <div className="bg-[var(--bg-surface-hover)]/40 border border-[var(--border-subtle)] rounded-xl p-4 space-y-3">
+              <div className="flex items-center justify-between">
+                <label className="text-xs font-bold text-blue-400 uppercase tracking-wider flex items-center gap-1.5">
+                  <Car className="w-4 h-4" /> Select Fleet Vehicle *
+                </label>
                 {selectedVehicleObj && (
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-2 border-t border-[var(--border-subtle)] text-[11px]">
-                    <div className="p-2 rounded-lg bg-[var(--bg-surface)] border border-[var(--border-subtle)]">
-                      <span className="text-[var(--text-faint)] block text-[10px]">Plate / Model</span>
-                      <span className="font-semibold text-[var(--text-main)] truncate block">
-                        {selectedVehicleObj.licensePlate || selectedVehicleObj.vehicleCode}
-                      </span>
-                    </div>
-                    <div className="p-2 rounded-lg bg-[var(--bg-surface)] border border-[var(--border-subtle)]">
-                      <span className="text-[var(--text-faint)] block text-[10px]">Current Branch</span>
-                      <span className="font-semibold text-blue-400 truncate block">
-                        {selectedVehicleObj.branchName || selectedVehicleObj.currentLocation || 'Dubai Head Office'}
-                      </span>
-                    </div>
-                    <div className="p-2 rounded-lg bg-[var(--bg-surface)] border border-[var(--border-subtle)]">
-                      <span className="text-[var(--text-faint)] block text-[10px]">Odometer</span>
-                      <span className="font-semibold text-emerald-400 block font-mono">
-                        {Number(selectedVehicleObj.odometerReading || selectedVehicleObj.currentMileage || 0).toLocaleString()} km
-                      </span>
-                    </div>
-                    <div className="p-2 rounded-lg bg-[var(--bg-surface)] border border-[var(--border-subtle)]">
-                      <span className="text-[var(--text-faint)] block text-[10px]">Fuel Level</span>
-                      <span className="font-semibold text-amber-400 block">
-                        {selectedVehicleObj.fuelLevel != null ? `${selectedVehicleObj.fuelLevel}%` : '100%'}
-                      </span>
-                    </div>
-                  </div>
+                  <span className="text-[11px] text-emerald-400 font-medium bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5 rounded-md">
+                    Auto-Populated Details
+                  </span>
                 )}
               </div>
 
-              {/* Branch Routing */}
-              <div>
-                <p className="text-xs font-bold text-orange-400 uppercase tracking-wider mb-3 flex items-center gap-1.5">
-                  <MapPin className="w-3.5 h-3.5" /> Transfer Route & Date
-                </p>
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                  <div>
-                    <label className={labelCls}>From Branch (Origin)</label>
-                    <select
-                      value={formData.fromBranchName}
-                      onChange={(e) => {
-                        const bName = e.target.value;
-                        const br = branches.find((b) => b.name === bName);
-                        setFormData((f) => ({
-                          ...f,
-                          fromBranchName: bName,
-                          fromBranchId: br ? br.id : f.fromBranchId,
-                        }));
-                      }}
-                      className={inputCls}
-                    >
-                      <option value="">-- Origin Branch --</option>
-                      {branches.map((b) => (
-                        <option key={b.id} value={b.name}>
-                          {b.name} ({b.emirate || 'UAE'})
-                        </option>
-                      ))}
-                    </select>
-                  </div>
+              <SelectInput
+                value={formData.vehicleId}
+                onChange={(e) => handleVehicleChange(e.target.value)}
+              >
+                <option value="">-- Choose a Vehicle (Plate / Code / Model) --</option>
+                {vehicles.map((v) => {
+                  const plate = v.licensePlate || 'NO PLATE';
+                  const code = v.vehicleCode ? `(${v.vehicleCode})` : '';
+                  const desc = [v.make, v.model].filter(Boolean).join(' ') || 'Vehicle';
+                  const loc = v.branchName || v.currentLocation || 'Unassigned';
+                  return (
+                    <option key={v.id} value={v.id}>
+                      {plate} — {desc} {code} [Current: {loc}]
+                    </option>
+                  );
+                })}
+              </SelectInput>
 
-                  <div>
-                    <label className={labelCls}>To Branch (Destination) *</label>
-                    <select
-                      value={formData.toBranchName}
-                      onChange={(e) => {
-                        const bName = e.target.value;
-                        const br = branches.find((b) => b.name === bName);
-                        setFormData((f) => ({
-                          ...f,
-                          toBranchName: bName,
-                          toBranchId: br ? br.id : f.toBranchId,
-                        }));
-                      }}
-                      className={inputCls}
-                    >
-                      <option value="">-- Choose Destination --</option>
-                      {branches.map((b) => (
-                        <option key={b.id} value={b.name}>
-                          {b.name} ({b.emirate || 'UAE'})
-                        </option>
-                      ))}
-                    </select>
+              {/* Selected vehicle summary card */}
+              {selectedVehicleObj && (
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-2 border-t border-[var(--border-subtle)] text-[11px]">
+                  <div className="p-2 rounded-lg bg-[var(--bg-surface)] border border-[var(--border-subtle)]">
+                    <span className="text-[var(--text-faint)] block text-[10px]">Plate / Model</span>
+                    <span className="font-semibold text-[var(--text-main)] truncate block">
+                      {selectedVehicleObj.licensePlate || selectedVehicleObj.vehicleCode}
+                    </span>
                   </div>
-
-                  <div>
-                    <label className={labelCls}>Transfer Date *</label>
-                    <input
-                      type="date"
-                      value={formData.transferDate}
-                      onChange={(e) => setFormData((f) => ({ ...f, transferDate: e.target.value }))}
-                      className={inputCls}
-                    />
+                  <div className="p-2 rounded-lg bg-[var(--bg-surface)] border border-[var(--border-subtle)]">
+                    <span className="text-[var(--text-faint)] block text-[10px]">Current Branch</span>
+                    <span className="font-semibold text-blue-400 truncate block">
+                      {selectedVehicleObj.branchName || selectedVehicleObj.currentLocation || 'Dubai Head Office'}
+                    </span>
+                  </div>
+                  <div className="p-2 rounded-lg bg-[var(--bg-surface)] border border-[var(--border-subtle)]">
+                    <span className="text-[var(--text-faint)] block text-[10px]">Odometer</span>
+                    <span className="font-semibold text-emerald-400 block font-mono">
+                      {Number(selectedVehicleObj.odometerReading || selectedVehicleObj.currentMileage || 0).toLocaleString()} km
+                    </span>
+                  </div>
+                  <div className="p-2 rounded-lg bg-[var(--bg-surface)] border border-[var(--border-subtle)]">
+                    <span className="text-[var(--text-faint)] block text-[10px]">Fuel Level</span>
+                    <span className="font-semibold text-amber-400 block">
+                      {selectedVehicleObj.fuelLevel != null ? `${selectedVehicleObj.fuelLevel}%` : '100%'}
+                    </span>
                   </div>
                 </div>
-              </div>
+              )}
+            </div>
 
-              {/* Personnel (Requested By & Approved By with Employee ID) */}
-              <div>
-                <p className="text-xs font-bold text-orange-400 uppercase tracking-wider mb-3 flex items-center gap-1.5">
-                  <User className="w-3.5 h-3.5" /> Operations Personnel
-                </p>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <div>
-                    <label className={labelCls}>Requested By (Employee) *</label>
-                    <select
-                      value={formData.requestedById}
-                      onChange={(e) => handleRequesterChange(e.target.value)}
-                      className={inputCls}
-                    >
-                      <option value="">-- Select Requesting Employee --</option>
-                      {employees.map((emp) => (
-                        <option key={emp.employeeId} value={emp.employeeId}>
-                          {emp.label}
-                        </option>
-                      ))}
-                    </select>
-                    {formData.requestedById && (
-                      <p className="text-[10px] text-[var(--text-faint)] mt-1 font-mono">
-                        Selected: {formData.requestedBy} ({formData.requestedById})
-                      </p>
-                    )}
-                  </div>
-
-                  <div>
-                    <label className={labelCls}>Approved By (Employee) *</label>
-                    <select
-                      value={formData.approvedById}
-                      onChange={(e) => handleApproverChange(e.target.value)}
-                      className={inputCls}
-                    >
-                      <option value="">-- Select Approving Authority --</option>
-                      {employees.map((emp) => (
-                        <option key={emp.employeeId} value={emp.employeeId}>
-                          {emp.label}
-                        </option>
-                      ))}
-                    </select>
-                    {formData.approvedById && (
-                      <p className="text-[10px] text-[var(--text-faint)] mt-1 font-mono">
-                        Selected: {formData.approvedBy} ({formData.approvedById})
-                      </p>
-                    )}
-                  </div>
-                </div>
-              </div>
-
-              {/* Transfer Reason */}
-              <div>
-                <label className="text-xs font-bold text-orange-400 uppercase tracking-wider flex items-center gap-1.5 mb-1.5">
-                  <Tag className="w-3.5 h-3.5" /> Transfer Reason *
-                </label>
-
-                <div className="space-y-2">
-                  <select
-                    value={isCustomReason ? '__CUSTOM__' : formData.reasonId || formData.reason}
-                    onChange={(e) => handleReasonChange(e.target.value)}
-                    className={inputCls}
+            {/* Branch Routing */}
+            <div>
+              <p className="text-[11px] font-bold uppercase tracking-wider text-[var(--text-main)] mb-3 flex items-center gap-1.5">
+                <MapPin className="w-3.5 h-3.5" /> Transfer Route & Date
+              </p>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <FormField label="From Branch (Origin)">
+                  <SelectInput
+                    value={formData.fromBranchName}
+                    onChange={(e) => {
+                      const bName = e.target.value;
+                      const br = branches.find((b) => b.name === bName);
+                      setFormData((f) => ({
+                        ...f,
+                        fromBranchName: bName,
+                        fromBranchId: br ? br.id : f.fromBranchId,
+                      }));
+                    }}
                   >
-                    <option value="">-- Choose Transfer Reason --</option>
-                    {reasons.map((r) => (
-                      <option key={r.id} value={r.id}>
-                        {r.label}
+                    <option value="">-- Origin Branch --</option>
+                    {branches.map((b) => (
+                      <option key={b.id} value={b.name}>
+                        {b.name} ({b.emirate || 'UAE'})
                       </option>
                     ))}
-                    <option value="__CUSTOM__">+ Other / Custom Reason...</option>
-                  </select>
+                  </SelectInput>
+                </FormField>
 
-                  {isCustomReason && (
-                    <input
-                      type="text"
-                      placeholder="Type custom transfer justification..."
-                      value={formData.customReason}
-                      onChange={(e) =>
-                        setFormData((f) => ({
-                          ...f,
-                          customReason: e.target.value,
-                          reason: e.target.value,
-                        }))
-                      }
-                      className={inputCls}
-                    />
+                <FormField label="To Branch (Destination)" required>
+                  <SelectInput
+                    value={formData.toBranchName}
+                    onChange={(e) => {
+                      const bName = e.target.value;
+                      const br = branches.find((b) => b.name === bName);
+                      setFormData((f) => ({
+                        ...f,
+                        toBranchName: bName,
+                        toBranchId: br ? br.id : f.toBranchId,
+                      }));
+                    }}
+                  >
+                    <option value="">-- Choose Destination --</option>
+                    {branches.map((b) => (
+                      <option key={b.id} value={b.name}>
+                        {b.name} ({b.emirate || 'UAE'})
+                      </option>
+                    ))}
+                  </SelectInput>
+                </FormField>
+
+                <FormField label="Transfer Date" required>
+                  <TextInput
+                    type="date"
+                    value={formData.transferDate}
+                    onChange={(e) => setFormData((f) => ({ ...f, transferDate: e.target.value }))}
+                  />
+                </FormField>
+              </div>
+            </div>
+
+            {/* Personnel (Requested By & Approved By with Employee ID) */}
+            <div>
+              <p className="text-[11px] font-bold uppercase tracking-wider text-[var(--text-main)] mb-3 flex items-center gap-1.5">
+                <User className="w-3.5 h-3.5" /> Operations Personnel
+              </p>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className={labelCls}>Requested By (Employee) *</label>
+                  <SelectInput
+                    value={formData.requestedById}
+                    onChange={(e) => handleRequesterChange(e.target.value)}
+                  >
+                    <option value="">-- Select Requesting Employee --</option>
+                    {employees.map((emp) => (
+                      <option key={emp.employeeId} value={emp.employeeId}>
+                        {emp.label}
+                      </option>
+                    ))}
+                  </SelectInput>
+                  {formData.requestedById && (
+                    <p className="text-[10px] text-[var(--text-faint)] mt-1 font-mono">
+                      Selected: {formData.requestedBy} ({formData.requestedById})
+                    </p>
+                  )}
+                </div>
+
+                <div>
+                  <label className={labelCls}>Approved By (Employee) *</label>
+                  <SelectInput
+                    value={formData.approvedById}
+                    onChange={(e) => handleApproverChange(e.target.value)}
+                  >
+                    <option value="">-- Select Approving Authority --</option>
+                    {employees.map((emp) => (
+                      <option key={emp.employeeId} value={emp.employeeId}>
+                        {emp.label}
+                      </option>
+                    ))}
+                  </SelectInput>
+                  {formData.approvedById && (
+                    <p className="text-[10px] text-[var(--text-faint)] mt-1 font-mono">
+                      Selected: {formData.approvedBy} ({formData.approvedById})
+                    </p>
                   )}
                 </div>
               </div>
+            </div>
 
-              {/* Vehicle Condition at Dispatch */}
-              <div>
-                <p className="text-xs font-bold text-orange-400 uppercase tracking-wider mb-3 flex items-center gap-1.5">
-                  <Gauge className="w-3.5 h-3.5" /> Dispatch Condition Telemetry
-                </p>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <div>
-                    <label className={labelCls}>Mileage at Transfer (km)</label>
-                    <div className="relative">
-                      <Gauge className="w-4 h-4 text-[var(--text-muted)] absolute left-3.5 top-1/2 -translate-y-1/2" />
-                      <input
-                        type="number"
-                        value={formData.mileageAtTransfer}
-                        onChange={(e) =>
-                          setFormData((f) => ({ ...f, mileageAtTransfer: Number(e.target.value) }))
-                        }
-                        className={`${inputCls} pl-10 font-mono`}
-                        min={0}
-                      />
-                    </div>
+            {/* Transfer Reason */}
+            <div>
+              <label className="text-xs font-bold text-blue-400 uppercase tracking-wider flex items-center gap-1.5 mb-1.5">
+                <Tag className="w-3.5 h-3.5" /> Transfer Reason *
+              </label>
+
+              <div className="space-y-2">
+                <SelectInput
+                  value={isCustomReason ? '__CUSTOM__' : formData.reasonId || formData.reason}
+                  onChange={(e) => handleReasonChange(e.target.value)}
+                >
+                  <option value="">-- Choose Transfer Reason --</option>
+                  {reasons.map((r) => (
+                    <option key={r.id} value={r.id}>
+                      {r.label}
+                    </option>
+                  ))}
+                  <option value="__CUSTOM__">+ Other / Custom Reason...</option>
+                </SelectInput>
+
+                {isCustomReason && (
+                  <TextInput
+                    type="text"
+                    placeholder="Type custom transfer justification..."
+                    value={formData.customReason}
+                    onChange={(e) =>
+                      setFormData((f) => ({
+                        ...f,
+                        customReason: e.target.value,
+                        reason: e.target.value,
+                      }))
+                    }
+                  />
+                )}
+              </div>
+            </div>
+
+            {/* Vehicle Condition at Dispatch */}
+            <div>
+              <p className="text-[11px] font-bold uppercase tracking-wider text-[var(--text-main)] mb-3 flex items-center gap-1.5">
+                <Gauge className="w-3.5 h-3.5" /> Dispatch Condition Telemetry
+              </p>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className={labelCls}>Mileage at Transfer (km)</label>
+                  <div className="relative">
+                    <Gauge className="w-4 h-4 text-[var(--text-muted)] absolute left-3.5 top-1/2 -translate-y-1/2" />
+                    <TextInput
+                      type="number"
+                      value={formData.mileageAtTransfer}
+                      onChange={(e) =>
+                        setFormData((f) => ({ ...f, mileageAtTransfer: Number(e.target.value) }))
+                      } className="pl-10 font-mono"
+                      min={0}
+                    />
                   </div>
+                </div>
 
-                  <div>
-                    <label className={labelCls}>Fuel Level at Transfer (%)</label>
-                    <div className="relative">
-                      <Fuel className="w-4 h-4 text-[var(--text-muted)] absolute left-3.5 top-1/2 -translate-y-1/2" />
-                      <input
-                        type="number"
-                        value={formData.fuelLevelAtTransfer}
-                        onChange={(e) =>
-                          setFormData((f) => ({ ...f, fuelLevelAtTransfer: Number(e.target.value) }))
-                        }
-                        className={`${inputCls} pl-10 font-mono`}
-                        min={0}
-                        max={100}
-                      />
-                    </div>
+                <div>
+                  <label className={labelCls}>Fuel Level at Transfer (%)</label>
+                  <div className="relative">
+                    <Fuel className="w-4 h-4 text-[var(--text-muted)] absolute left-3.5 top-1/2 -translate-y-1/2" />
+                    <TextInput
+                      type="number"
+                      value={formData.fuelLevelAtTransfer}
+                      onChange={(e) =>
+                        setFormData((f) => ({ ...f, fuelLevelAtTransfer: Number(e.target.value) }))
+                      } className="pl-10 font-mono"
+                      min={0}
+                      max={100}
+                    />
                   </div>
                 </div>
               </div>
-
-              {/* Notes */}
-              <div>
-                <label className={labelCls}>Operational & Driver Notes</label>
-                <textarea
-                  value={formData.notes}
-                  onChange={(e) => setFormData((f) => ({ ...f, notes: e.target.value }))}
-                  className={`${inputCls} resize-none h-16`}
-                  placeholder="Driver handover instructions, toll tag notes, or return schedule..."
-                />
-              </div>
             </div>
 
-            <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-[var(--border-subtle)]">
-              <button
-                onClick={() => setShowModal(false)}
-                className="px-4 py-2 bg-[var(--bg-surface-hover)] hover:bg-[var(--bg-surface-hover)] text-[var(--text-main)] rounded-xl text-xs font-medium transition-colors"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleSave}
-                disabled={saving}
-                className="px-6 py-2 bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-600 hover:to-amber-600 disabled:opacity-50 text-white rounded-xl text-xs font-semibold transition-all shadow-md shadow-orange-500/20"
-              >
-                {saving ? 'Creating...' : 'Create Transfer'}
-              </button>
+            {/* Notes */}
+            <div>
+              <label className={labelCls}>Operational & Driver Notes</label>
+              <TextAreaInput
+                value={formData.notes}
+                onChange={(e) => setFormData((f) => ({ ...f, notes: e.target.value }))} className="resize-none h-16"
+                placeholder="Driver handover instructions, toll tag notes, or return schedule..."
+              />
             </div>
           </div>
-        </div>
+
+          <FormFooter secondary={<SecondaryButton onClick={() => setShowModal(false)}>Cancel</SecondaryButton>}>
+            <PrimaryButton onClick={handleSave} disabled={saving}>{saving ? 'Creating...' : 'Create Transfer'}</PrimaryButton>
+          </FormFooter>
+        </FormModal>
       )}
     </div>
   );

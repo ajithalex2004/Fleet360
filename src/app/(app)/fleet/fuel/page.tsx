@@ -3,6 +3,8 @@
 import React, { useState, useEffect } from 'react';
 import { VehicleRef, DriverRef } from '@/components/ui/EntityRef';
 
+import { FormField, FormFooter, FormSection, PrimaryButton, SecondaryButton, TextInput } from '@/components/ui/form-kit';
+import { FormModal } from '@/components/ui/form-modal';
 interface FuelLog {
   id: string;
   vehicleId: string;
@@ -321,193 +323,147 @@ export default function FuelManagement() {
 
       {/* Fuel Log Modal */}
       {showLogModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
-          <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-2xl p-8 max-w-md w-full">
-            <h2 className="text-2xl font-bold text-[var(--text-main)] mb-6">New Fuel Log</h2>
-
-            <form onSubmit={handleAddLog} className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-[var(--text-muted)] mb-2">Vehicle</label>
-                <input
+        <FormModal
+          onClose={() => setShowLogModal(false)}
+          title="New Fuel Log"
+          size="sm"
+        >
+          <form onSubmit={handleAddLog} className="space-y-5">
+            <FormSection title="Fuel log" columns={1}>
+              <FormField label="Vehicle" required>
+                <TextInput
                   type="text"
                   value={logFormData.vehicle}
                   onChange={(e) => setLogFormData({ ...logFormData, vehicle: e.target.value })}
-                  className="w-full bg-[var(--bg-surface-hover)]/50 border border-[var(--border-subtle)] rounded-xl px-4 py-2 text-[var(--text-main)] focus:outline-none focus:ring-2 focus:ring-orange-500"
                   required
                 />
-              </div>
+              </FormField>
 
-              <div>
-                <label className="block text-sm font-medium text-[var(--text-muted)] mb-2">Driver</label>
-                <input
+              <FormField label="Driver" required>
+                <TextInput
                   type="text"
                   value={logFormData.driver}
                   onChange={(e) => setLogFormData({ ...logFormData, driver: e.target.value })}
-                  className="w-full bg-[var(--bg-surface-hover)]/50 border border-[var(--border-subtle)] rounded-xl px-4 py-2 text-[var(--text-main)] focus:outline-none focus:ring-2 focus:ring-orange-500"
                   required
                 />
-              </div>
+              </FormField>
 
-              <div>
-                <label className="block text-sm font-medium text-[var(--text-muted)] mb-2">Date</label>
-                <input
+              <FormField label="Date" required>
+                <TextInput
                   type="date"
                   value={logFormData.date}
                   onChange={(e) => setLogFormData({ ...logFormData, date: e.target.value })}
-                  className="w-full bg-[var(--bg-surface-hover)]/50 border border-[var(--border-subtle)] rounded-xl px-4 py-2 text-[var(--text-main)] focus:outline-none focus:ring-2 focus:ring-orange-500"
                   required
                 />
-              </div>
+              </FormField>
 
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-[var(--text-muted)] mb-2">Liters</label>
-                  <input
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <FormField label="Liters" required>
+                  <TextInput
                     type="number"
                     step="0.01"
                     value={logFormData.liters}
                     onChange={(e) => setLogFormData({ ...logFormData, liters: e.target.value })}
-                    className="w-full bg-[var(--bg-surface-hover)]/50 border border-[var(--border-subtle)] rounded-xl px-4 py-2 text-[var(--text-main)] focus:outline-none focus:ring-2 focus:ring-orange-500"
                     required
                   />
-                </div>
+                </FormField>
 
-                <div>
-                  <label className="block text-sm font-medium text-[var(--text-muted)] mb-2">Cost/Liter</label>
-                  <input
+                <FormField label="Cost/Liter" required>
+                  <TextInput
                     type="number"
                     step="0.01"
                     value={logFormData.costPerLiter}
                     onChange={(e) => setLogFormData({ ...logFormData, costPerLiter: e.target.value })}
-                    className="w-full bg-[var(--bg-surface-hover)]/50 border border-[var(--border-subtle)] rounded-xl px-4 py-2 text-[var(--text-main)] focus:outline-none focus:ring-2 focus:ring-orange-500"
                     required
                   />
-                </div>
+                </FormField>
               </div>
 
-              <div>
-                <label className="block text-sm font-medium text-[var(--text-muted)] mb-2">Mileage</label>
-                <input
+              <FormField label="Mileage" required>
+                <TextInput
                   type="number"
                   value={logFormData.mileage}
                   onChange={(e) => setLogFormData({ ...logFormData, mileage: e.target.value })}
-                  className="w-full bg-[var(--bg-surface-hover)]/50 border border-[var(--border-subtle)] rounded-xl px-4 py-2 text-[var(--text-main)] focus:outline-none focus:ring-2 focus:ring-orange-500"
                   required
                 />
-              </div>
+              </FormField>
 
-              <div>
-                <label className="block text-sm font-medium text-[var(--text-muted)] mb-2">Station</label>
-                <input
+              <FormField label="Station" required>
+                <TextInput
                   type="text"
                   value={logFormData.station}
                   onChange={(e) => setLogFormData({ ...logFormData, station: e.target.value })}
-                  className="w-full bg-[var(--bg-surface-hover)]/50 border border-[var(--border-subtle)] rounded-xl px-4 py-2 text-[var(--text-main)] focus:outline-none focus:ring-2 focus:ring-orange-500"
                   required
                 />
-              </div>
-
-              <div className="flex gap-3 pt-4">
-                <button
-                  type="submit"
-                  className="flex-1 rounded-xl bg-gradient-to-r from-orange-600 to-amber-600 px-4 py-2 text-sm font-medium text-white hover:shadow-lg hover:shadow-orange-500/20 transition-all"
-                >
-                  Add Log
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setShowLogModal(false)}
-                  className="flex-1 rounded-xl bg-[var(--bg-surface-hover)] px-4 py-2 text-sm font-medium text-[var(--text-muted)] hover:bg-[var(--bg-surface-hover)] transition-all"
-                >
-                  Cancel
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
+              </FormField>
+            </FormSection>
+            <FormFooter secondary={<SecondaryButton type="button" onClick={() => setShowLogModal(false)}>Cancel</SecondaryButton>}>
+              <PrimaryButton type="submit">Add Log</PrimaryButton>
+            </FormFooter>
+          </form>
+        </FormModal>
       )}
 
       {/* Fuel Card Modal */}
       {showCardModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
-          <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-2xl p-8 max-w-md w-full">
-            <h2 className="text-2xl font-bold text-[var(--text-main)] mb-6">New Fuel Card</h2>
-
-            <form onSubmit={handleAddCard} className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-[var(--text-muted)] mb-2">Card Number</label>
-                <input
+        <FormModal
+          onClose={() => setShowCardModal(false)}
+          title="New Fuel Card"
+          size="sm"
+        >
+          <form onSubmit={handleAddCard} className="space-y-5">
+            <FormSection title="Fuel card" columns={1}>
+              <FormField label="Card Number" required>
+                <TextInput
                   type="text"
                   value={cardFormData.cardNumber}
                   onChange={(e) => setCardFormData({ ...cardFormData, cardNumber: e.target.value })}
-                  className="w-full bg-[var(--bg-surface-hover)]/50 border border-[var(--border-subtle)] rounded-xl px-4 py-2 text-[var(--text-main)] focus:outline-none focus:ring-2 focus:ring-orange-500"
                   required
                 />
-              </div>
+              </FormField>
 
-              <div>
-                <label className="block text-sm font-medium text-[var(--text-muted)] mb-2">Vehicle</label>
-                <input
+              <FormField label="Vehicle" required>
+                <TextInput
                   type="text"
                   value={cardFormData.vehicle}
                   onChange={(e) => setCardFormData({ ...cardFormData, vehicle: e.target.value })}
-                  className="w-full bg-[var(--bg-surface-hover)]/50 border border-[var(--border-subtle)] rounded-xl px-4 py-2 text-[var(--text-main)] focus:outline-none focus:ring-2 focus:ring-orange-500"
                   required
                 />
-              </div>
+              </FormField>
 
-              <div>
-                <label className="block text-sm font-medium text-[var(--text-muted)] mb-2">Driver</label>
-                <input
+              <FormField label="Driver" required>
+                <TextInput
                   type="text"
                   value={cardFormData.driver}
                   onChange={(e) => setCardFormData({ ...cardFormData, driver: e.target.value })}
-                  className="w-full bg-[var(--bg-surface-hover)]/50 border border-[var(--border-subtle)] rounded-xl px-4 py-2 text-[var(--text-main)] focus:outline-none focus:ring-2 focus:ring-orange-500"
                   required
                 />
-              </div>
+              </FormField>
 
-              <div>
-                <label className="block text-sm font-medium text-[var(--text-muted)] mb-2">Monthly Limit (AED)</label>
-                <input
+              <FormField label="Monthly Limit (AED)" required>
+                <TextInput
                   type="number"
                   step="0.01"
                   value={cardFormData.monthlyLimit}
                   onChange={(e) => setCardFormData({ ...cardFormData, monthlyLimit: e.target.value })}
-                  className="w-full bg-[var(--bg-surface-hover)]/50 border border-[var(--border-subtle)] rounded-xl px-4 py-2 text-[var(--text-main)] focus:outline-none focus:ring-2 focus:ring-orange-500"
                   required
                 />
-              </div>
+              </FormField>
 
-              <div>
-                <label className="block text-sm font-medium text-[var(--text-muted)] mb-2">Expiry Date</label>
-                <input
+              <FormField label="Expiry Date" required>
+                <TextInput
                   type="date"
                   value={cardFormData.expiry}
                   onChange={(e) => setCardFormData({ ...cardFormData, expiry: e.target.value })}
-                  className="w-full bg-[var(--bg-surface-hover)]/50 border border-[var(--border-subtle)] rounded-xl px-4 py-2 text-[var(--text-main)] focus:outline-none focus:ring-2 focus:ring-orange-500"
                   required
                 />
-              </div>
-
-              <div className="flex gap-3 pt-4">
-                <button
-                  type="submit"
-                  className="flex-1 rounded-xl bg-gradient-to-r from-orange-600 to-amber-600 px-4 py-2 text-sm font-medium text-white hover:shadow-lg hover:shadow-orange-500/20 transition-all"
-                >
-                  Add Card
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setShowCardModal(false)}
-                  className="flex-1 rounded-xl bg-[var(--bg-surface-hover)] px-4 py-2 text-sm font-medium text-[var(--text-muted)] hover:bg-[var(--bg-surface-hover)] transition-all"
-                >
-                  Cancel
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
+              </FormField>
+            </FormSection>
+            <FormFooter secondary={<SecondaryButton type="button" onClick={() => setShowCardModal(false)}>Cancel</SecondaryButton>}>
+              <PrimaryButton type="submit">Add Card</PrimaryButton>
+            </FormFooter>
+          </form>
+        </FormModal>
       )}
     </div>
   );

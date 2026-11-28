@@ -3,6 +3,8 @@ import { KpiCard, StatGrid } from '@/components/ui/page-theme';
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { ACTIVE_TOGGLE_BORDERED } from '@/lib/ui/toggle';
+import { FormSection, FormField, TextInput, SelectInput, FormFooter, PrimaryButton, SecondaryButton } from '@/components/ui/form-kit';
+import { FormModal } from '@/components/ui/form-modal';
 import {
   AlertTriangle,
   Zap,
@@ -13,7 +15,6 @@ import {
   Plus,
   Search,
   HelpCircle,
-  X,
 } from 'lucide-react';
 
 interface TrafficFineItem {
@@ -401,129 +402,84 @@ export default function TrafficFinesPage() {
       </div>
 
       {/* Record Fine Modal */}
-      {showModal && (
-        <div className="fixed inset-0 z-50 bg-[var(--bg-canvas)]/80 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-2xl max-w-lg w-full p-6 space-y-4 shadow-2xl">
-            <div className="flex items-center justify-between border-b border-[var(--border-subtle)] pb-3">
-              <h3 className="text-base font-bold text-[var(--text-main)] flex items-center gap-2">
-                <AlertTriangle className="w-5 h-5 text-amber-400" />
-                Record Traffic Violation / Toll
-              </h3>
-              <button
-                onClick={() => setShowModal(false)}
-                className="p-1 rounded-lg hover:bg-[var(--bg-surface-hover)] text-[var(--text-muted)] hover:text-[var(--text-main)] transition"
+      <FormModal
+        open={showModal}
+        onClose={() => setShowModal(false)}
+        title="Record Traffic Violation / Toll"
+        icon={AlertTriangle}
+        accent="amber"
+      >
+        <form onSubmit={handleAddFine} className="space-y-5">
+          <FormSection title="Fine details" columns={2}>
+            <FormField label="Vehicle ID / UUID" required>
+              <TextInput
+                type="text"
+                required
+                placeholder="Vehicle UUID..."
+                value={formData.vehicleId}
+                onChange={(e) => setFormData({ ...formData, vehicleId: e.target.value })}
+              />
+            </FormField>
+            <FormField label="Fine Reference No." required>
+              <TextInput
+                type="text"
+                required
+                placeholder="e.g. DXB-FN-98214"
+                value={formData.fineRef}
+                onChange={(e) => setFormData({ ...formData, fineRef: e.target.value })}
+              />
+            </FormField>
+            <FormField label="Violation Timestamp" required>
+              <TextInput
+                type="datetime-local"
+                required
+                value={formData.fineDate}
+                onChange={(e) => setFormData({ ...formData, fineDate: e.target.value })}
+              />
+            </FormField>
+            <FormField label="Fine Amount" qualifier="(AED)" required>
+              <TextInput
+                type="number"
+                step="0.01"
+                required
+                placeholder="e.g. 600"
+                value={formData.fineAmount}
+                onChange={(e) => setFormData({ ...formData, fineAmount: e.target.value })}
+              />
+            </FormField>
+            <FormField label="Offence Type">
+              <SelectInput
+                value={formData.offenceType}
+                onChange={(e) => setFormData({ ...formData, offenceType: e.target.value })}
               >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            <form onSubmit={handleAddFine} className="space-y-3 text-xs">
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-[var(--text-muted)] mb-1">Vehicle ID / UUID</label>
-                  <input
-                    type="text"
-                    required
-                    placeholder="Vehicle UUID..."
-                    value={formData.vehicleId}
-                    onChange={(e) => setFormData({ ...formData, vehicleId: e.target.value })}
-                    className="w-full px-3 py-2 rounded-xl bg-[var(--bg-canvas)] border border-[var(--border-subtle)] text-[var(--text-main)] focus:outline-none focus:border-amber-500"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-[var(--text-muted)] mb-1">Fine Reference No.</label>
-                  <input
-                    type="text"
-                    required
-                    placeholder="e.g. DXB-FN-98214"
-                    value={formData.fineRef}
-                    onChange={(e) => setFormData({ ...formData, fineRef: e.target.value })}
-                    className="w-full px-3 py-2 rounded-xl bg-[var(--bg-canvas)] border border-[var(--border-subtle)] text-[var(--text-main)] focus:outline-none focus:border-amber-500"
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-[var(--text-muted)] mb-1">Violation Timestamp</label>
-                  <input
-                    type="datetime-local"
-                    required
-                    value={formData.fineDate}
-                    onChange={(e) => setFormData({ ...formData, fineDate: e.target.value })}
-                    className="w-full px-3 py-2 rounded-xl bg-[var(--bg-canvas)] border border-[var(--border-subtle)] text-[var(--text-main)] focus:outline-none focus:border-amber-500"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-[var(--text-muted)] mb-1">Fine Amount (AED)</label>
-                  <input
-                    type="number"
-                    step="0.01"
-                    required
-                    placeholder="e.g. 600"
-                    value={formData.fineAmount}
-                    onChange={(e) => setFormData({ ...formData, fineAmount: e.target.value })}
-                    className="w-full px-3 py-2 rounded-xl bg-[var(--bg-canvas)] border border-[var(--border-subtle)] text-[var(--text-main)] focus:outline-none focus:border-amber-500"
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-[var(--text-muted)] mb-1">Offence Type</label>
-                  <select
-                    value={formData.offenceType}
-                    onChange={(e) => setFormData({ ...formData, offenceType: e.target.value })}
-                    className="w-full px-3 py-2 rounded-xl bg-[var(--bg-canvas)] border border-[var(--border-subtle)] text-[var(--text-main)] focus:outline-none focus:border-amber-500"
-                  >
-                    <option value="SPEEDING">Speeding (Radar)</option>
-                    <option value="RED_LIGHT">Red Light Violation</option>
-                    <option value="LANE_DISCIPLINE">Lane Discipline Misuse</option>
-                    <option value="ILLEGAL_PARKING">Illegal Parking</option>
-                    <option value="SALIK_TOLL">Salik Toll Crossing</option>
-                    <option value="DARB_TOLL">Darb Toll Crossing</option>
-                    <option value="EXPIRED_REGISTRATION">Expired Mulkiya / Testing (Company)</option>
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-[var(--text-muted)] mb-1">Authority</label>
-                  <select
-                    value={formData.authority}
-                    onChange={(e) => setFormData({ ...formData, authority: e.target.value })}
-                    className="w-full px-3 py-2 rounded-xl bg-[var(--bg-canvas)] border border-[var(--border-subtle)] text-[var(--text-main)] focus:outline-none focus:border-amber-500"
-                  >
-                    <option value="RTA">Dubai RTA</option>
-                    <option value="DUBAI_POLICE">Dubai Police</option>
-                    <option value="ABU_DHABI_POLICE">Abu Dhabi Police / ITC</option>
-                    <option value="SALIK">Salik Toll System</option>
-                    <option value="DARB">Darb Abu Dhabi</option>
-                    <option value="MUNICIPALITY">Municipality</option>
-                  </select>
-                </div>
-              </div>
-
-              <div className="flex justify-end gap-2 pt-2">
-                <button
-                  type="button"
-                  onClick={() => setShowModal(false)}
-                  className="px-4 py-2 rounded-xl bg-[var(--bg-surface)] text-[var(--text-muted)] font-semibold hover:bg-[var(--bg-surface-hover)] transition"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className="px-4 py-2 rounded-xl bg-amber-500 text-white font-bold hover:bg-amber-400 transition"
-                >
-                  Save Fine
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
+                <option value="SPEEDING">Speeding (Radar)</option>
+                <option value="RED_LIGHT">Red Light Violation</option>
+                <option value="LANE_DISCIPLINE">Lane Discipline Misuse</option>
+                <option value="ILLEGAL_PARKING">Illegal Parking</option>
+                <option value="SALIK_TOLL">Salik Toll Crossing</option>
+                <option value="DARB_TOLL">Darb Toll Crossing</option>
+                <option value="EXPIRED_REGISTRATION">Expired Mulkiya / Testing (Company)</option>
+              </SelectInput>
+            </FormField>
+            <FormField label="Authority">
+              <SelectInput
+                value={formData.authority}
+                onChange={(e) => setFormData({ ...formData, authority: e.target.value })}
+              >
+                <option value="RTA">Dubai RTA</option>
+                <option value="DUBAI_POLICE">Dubai Police</option>
+                <option value="ABU_DHABI_POLICE">Abu Dhabi Police / ITC</option>
+                <option value="SALIK">Salik Toll System</option>
+                <option value="DARB">Darb Abu Dhabi</option>
+                <option value="MUNICIPALITY">Municipality</option>
+              </SelectInput>
+            </FormField>
+          </FormSection>
+          <FormFooter secondary={<SecondaryButton onClick={() => setShowModal(false)}>Cancel</SecondaryButton>}>
+            <PrimaryButton type="submit">Save Fine</PrimaryButton>
+          </FormFooter>
+        </form>
+      </FormModal>
     </div>
   );
 }

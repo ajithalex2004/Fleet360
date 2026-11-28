@@ -2,6 +2,8 @@
 
 import React, { useState, useEffect } from 'react';
 
+import { FormField, FormFooter, FormSection, PrimaryButton, SecondaryButton, SelectInput, TextInput } from '@/components/ui/form-kit';
+import { FormModal } from '@/components/ui/form-modal';
 interface DriverDocument {
   id: string;
   driverName: string;
@@ -200,17 +202,17 @@ export default function DriverDocuments() {
 
       {/* Modal */}
       {showModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
-          <div className="bg-[var(--bg-surface-elevated)] border border-[var(--border-subtle)] rounded-2xl p-8 max-w-md w-full">
-            <h2 className="text-2xl font-bold text-[var(--text-main)] mb-6">Add Driver Document</h2>
-
-            <form onSubmit={handleAddDocument} className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-[var(--text-muted)] mb-2">Driver</label>
-                <select
+        <FormModal
+          onClose={() => setShowModal(false)}
+          title="Add Driver Document"
+          size="sm"
+        >
+          <form onSubmit={handleAddDocument} className="space-y-5">
+            <FormSection title="Document details" columns={1}>
+              <FormField label="Driver" required>
+                <SelectInput
                   value={formData.driverId}
                   onChange={(e) => setFormData({ ...formData, driverId: e.target.value })}
-                  className="w-full bg-[var(--input-bg)] border border-[var(--border-subtle)] rounded-xl px-4 py-2 text-[var(--text-main)] focus:outline-none focus:ring-2 focus:ring-cyan-500"
                   required
                 >
                   <option value="">Select Driver</option>
@@ -219,15 +221,13 @@ export default function DriverDocuments() {
                       {driver}
                     </option>
                   ))}
-                </select>
-              </div>
+                </SelectInput>
+              </FormField>
 
-              <div>
-                <label className="block text-sm font-medium text-[var(--text-muted)] mb-2">Document Type</label>
-                <select
+              <FormField label="Document Type" required>
+                <SelectInput
                   value={formData.docType}
                   onChange={(e) => setFormData({ ...formData, docType: e.target.value })}
-                  className="w-full bg-[var(--input-bg)] border border-[var(--border-subtle)] rounded-xl px-4 py-2 text-[var(--text-main)] focus:outline-none focus:ring-2 focus:ring-cyan-500"
                   required
                 >
                   <option value="">Select Type</option>
@@ -236,49 +236,32 @@ export default function DriverDocuments() {
                       {type}
                     </option>
                   ))}
-                </select>
-              </div>
+                </SelectInput>
+              </FormField>
 
-              <div>
-                <label className="block text-sm font-medium text-[var(--text-muted)] mb-2">Document Number</label>
-                <input
+              <FormField label="Document Number" required>
+                <TextInput
                   type="text"
                   value={formData.docNumber}
                   onChange={(e) => setFormData({ ...formData, docNumber: e.target.value })}
-                  className="w-full bg-[var(--input-bg)] border border-[var(--border-subtle)] rounded-xl px-4 py-2 text-[var(--text-main)] focus:outline-none focus:ring-2 focus:ring-cyan-500"
                   required
                 />
-              </div>
+              </FormField>
 
-              <div>
-                <label className="block text-sm font-medium text-[var(--text-muted)] mb-2">Expiry Date</label>
-                <input
+              <FormField label="Expiry Date" required>
+                <TextInput
                   type="date"
                   value={formData.expiryDate}
                   onChange={(e) => setFormData({ ...formData, expiryDate: e.target.value })}
-                  className="w-full bg-[var(--input-bg)] border border-[var(--border-subtle)] rounded-xl px-4 py-2 text-[var(--text-main)] focus:outline-none focus:ring-2 focus:ring-cyan-500"
                   required
                 />
-              </div>
-
-              <div className="flex gap-3 pt-4">
-                <button
-                  type="submit"
-                  className="flex-1 rounded-xl bg-gradient-to-r from-cyan-600 to-teal-600 px-4 py-2 text-sm font-medium text-white hover:shadow-lg hover:shadow-cyan-500/20 transition-all"
-                >
-                  Add Document
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setShowModal(false)}
-                  className="flex-1 rounded-xl bg-[var(--bg-surface-hover)] px-4 py-2 text-sm font-medium text-[var(--text-muted)] hover:bg-[var(--bg-surface-elevated)] transition-all"
-                >
-                  Cancel
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
+              </FormField>
+            </FormSection>
+            <FormFooter secondary={<SecondaryButton type="button" onClick={() => setShowModal(false)}>Cancel</SecondaryButton>}>
+              <PrimaryButton type="submit">Add Document</PrimaryButton>
+            </FormFooter>
+          </form>
+        </FormModal>
       )}
     </div>
   );

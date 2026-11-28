@@ -50,6 +50,7 @@ import {
   ExternalLink,
 } from 'lucide-react';
 
+import { FormField, TextAreaInput } from '@/components/ui/form-kit';
 const FleetLiveMap = dynamic(() => import('@/components/shared/FleetLiveMap'), {
   ssr: false,
   loading: () => (
@@ -1946,17 +1947,13 @@ export default function TelematicsPage() {
               </div>
             </div>
 
-            <div>
-              <label className="block text-xs font-semibold text-[var(--text-muted)] mb-1.5">
-                Raw JSON Webhook Body:
-              </label>
-              <textarea
+            <FormField label="Raw JSON Webhook Body:">
+              <TextAreaInput
                 value={simPayload}
                 onChange={(e) => setSimPayload(e.target.value)}
                 rows={12}
-                className="w-full bg-[var(--bg-canvas)] border border-[var(--border-subtle)] rounded-xl p-3 font-mono text-xs text-amber-200 focus:outline-none focus:border-amber-500 shadow-inner"
               />
-            </div>
+            </FormField>
 
             <div className="flex items-center justify-between pt-2">
               <span className="text-[11px] text-[var(--text-faint)] font-mono">

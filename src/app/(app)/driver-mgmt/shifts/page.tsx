@@ -16,6 +16,8 @@ import {
   Car,
 } from 'lucide-react';
 
+import { FormField, FormFooter, FormSection, PrimaryButton, SecondaryButton, TextAreaInput, TextInput } from '@/components/ui/form-kit';
+import { FormModal } from '@/components/ui/form-modal';
 interface Shift {
   id: string;
   driverId: string;
@@ -193,24 +195,20 @@ export default function ShiftManagement() {
 
       {/* Date Range Filter */}
       <div className="flex gap-4">
-        <div className="flex-1">
-          <label className="block text-sm font-medium text-[var(--text-muted)] mb-2">Start Date</label>
-          <input
+        <FormField label="Start Date">
+          <TextInput
             type="date"
             value={filterStartDate}
             onChange={(e) => setFilterStartDate(e.target.value)}
-            className="w-full bg-[var(--input-bg)] border border-[var(--border-subtle)] rounded-xl px-4 py-2 text-sm text-[var(--text-main)] focus:outline-none focus:ring-2 focus:ring-cyan-500"
           />
-        </div>
-        <div className="flex-1">
-          <label className="block text-sm font-medium text-[var(--text-muted)] mb-2">End Date</label>
-          <input
+        </FormField>
+        <FormField label="End Date">
+          <TextInput
             type="date"
             value={filterEndDate}
             onChange={(e) => setFilterEndDate(e.target.value)}
-            className="w-full bg-[var(--input-bg)] border border-[var(--border-subtle)] rounded-xl px-4 py-2 text-sm text-[var(--text-main)] focus:outline-none focus:ring-2 focus:ring-cyan-500"
           />
-        </div>
+        </FormField>
       </div>
 
       {/* Shifts Table */}
@@ -559,95 +557,72 @@ export default function ShiftManagement() {
 
       {/* Create New Shift Modal */}
       {showModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
-          <div className="bg-[var(--bg-surface-elevated)] border border-[var(--border-subtle)] rounded-2xl p-8 max-w-md w-full">
-            <h2 className="text-2xl font-bold text-[var(--text-main)] mb-6">Create New Shift</h2>
-
-            <form onSubmit={handleAddShift} className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-[var(--text-muted)] mb-2">Driver ID</label>
-                <input
+        <FormModal
+          onClose={() => setShowModal(false)}
+          title="Create New Shift"
+          size="sm"
+        >
+          <form onSubmit={handleAddShift} className="space-y-5">
+            <FormSection title="Shift details" columns={1}>
+              <FormField label="Driver ID" required>
+                <TextInput
                   type="text"
                   value={formData.driverId}
                   onChange={(e) => setFormData({ ...formData, driverId: e.target.value })}
-                  className="w-full bg-[var(--input-bg)] border border-[var(--border-subtle)] rounded-xl px-4 py-2 text-[var(--text-main)] focus:outline-none focus:ring-2 focus:ring-cyan-500"
                   required
                 />
-              </div>
+              </FormField>
 
-              <div>
-                <label className="block text-sm font-medium text-[var(--text-muted)] mb-2">Shift Date</label>
-                <input
+              <FormField label="Shift Date" required>
+                <TextInput
                   type="date"
                   value={formData.shiftDate}
                   onChange={(e) => setFormData({ ...formData, shiftDate: e.target.value })}
-                  className="w-full bg-[var(--input-bg)] border border-[var(--border-subtle)] rounded-xl px-4 py-2 text-[var(--text-main)] focus:outline-none focus:ring-2 focus:ring-cyan-500"
                   required
                 />
-              </div>
+              </FormField>
 
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-[var(--text-muted)] mb-2">Start Time</label>
-                  <input
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <FormField label="Start Time" required>
+                  <TextInput
                     type="time"
                     value={formData.startTime}
                     onChange={(e) => setFormData({ ...formData, startTime: e.target.value })}
-                    className="w-full bg-[var(--input-bg)] border border-[var(--border-subtle)] rounded-xl px-4 py-2 text-[var(--text-main)] focus:outline-none focus:ring-2 focus:ring-cyan-500"
                     required
                   />
-                </div>
+                </FormField>
 
-                <div>
-                  <label className="block text-sm font-medium text-[var(--text-muted)] mb-2">End Time</label>
-                  <input
+                <FormField label="End Time" required>
+                  <TextInput
                     type="time"
                     value={formData.endTime}
                     onChange={(e) => setFormData({ ...formData, endTime: e.target.value })}
-                    className="w-full bg-[var(--input-bg)] border border-[var(--border-subtle)] rounded-xl px-4 py-2 text-[var(--text-main)] focus:outline-none focus:ring-2 focus:ring-cyan-500"
                     required
                   />
-                </div>
+                </FormField>
               </div>
 
-              <div>
-                <label className="block text-sm font-medium text-[var(--text-muted)] mb-2">Vehicle ID (optional)</label>
-                <input
+              <FormField label="Vehicle ID (optional)">
+                <TextInput
                   type="text"
                   value={formData.vehicleId}
                   onChange={(e) => setFormData({ ...formData, vehicleId: e.target.value })}
-                  className="w-full bg-[var(--input-bg)] border border-[var(--border-subtle)] rounded-xl px-4 py-2 text-[var(--text-main)] focus:outline-none focus:ring-2 focus:ring-cyan-500"
                 />
-              </div>
+              </FormField>
 
-              <div>
-                <label className="block text-sm font-medium text-[var(--text-muted)] mb-2">Notes</label>
-                <textarea
+              <FormField label="Notes">
+                <TextAreaInput
                   value={formData.notes}
                   onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
-                  className="w-full bg-[var(--input-bg)] border border-[var(--border-subtle)] rounded-xl px-4 py-2 text-[var(--text-main)] focus:outline-none focus:ring-2 focus:ring-cyan-500 resize-none"
                   rows={3}
                 />
-              </div>
-
-              <div className="flex gap-3 pt-4">
-                <button
-                  type="submit"
-                  className="flex-1 rounded-xl bg-gradient-to-r from-cyan-600 to-teal-600 px-4 py-2 text-sm font-medium text-white hover:shadow-lg hover:shadow-cyan-500/20 transition-all"
-                >
-                  Create Shift
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setShowModal(false)}
-                  className="flex-1 rounded-xl bg-[var(--bg-surface-hover)] px-4 py-2 text-sm font-medium text-[var(--text-muted)] hover:bg-[var(--bg-surface-elevated)] transition-all"
-                >
-                  Cancel
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
+              </FormField>
+            </FormSection>
+            <FormFooter secondary={<SecondaryButton type="button" onClick={() => setShowModal(false)}>Cancel</SecondaryButton>}>
+              <PrimaryButton type="submit">Create Shift</PrimaryButton>
+            </FormFooter>
+          </form>
+        </FormModal>
       )}
     </div>
   );

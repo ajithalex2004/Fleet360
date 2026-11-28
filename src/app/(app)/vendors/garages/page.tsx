@@ -7,11 +7,13 @@
 import { useEffect, useState } from 'react';
 import PhoneInput from '@/components/ui/PhoneInput';
 import PhoneCell from '@/components/ui/PhoneCell';
-import { Building2, Mail, MapPin, User, X } from 'lucide-react';
+import { Building2, Mail, MapPin, User } from 'lucide-react';
 import { getGarages, createGarage } from '@/services/mockData';
 import { Garage } from '@/types/maintenance';
 import { useToast } from '@/contexts/ToastContext';
 
+import { FormField, FormFooter, PrimaryButton, SecondaryButton, TextInput } from '@/components/ui/form-kit';
+import { FormModal } from '@/components/ui/form-modal';
 const EMPTY_FORM = {
   name: '',
   location: '',
@@ -173,121 +175,88 @@ export default function VendorGaragesPage() {
       )}
 
       {showAddModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
-          <div className="bg-[var(--bg-surface)] rounded-2xl w-full max-w-lg shadow-2xl">
-            <div className="p-6 border-b border-[var(--border-subtle)] flex items-center justify-between">
-              <h3 className="text-lg font-bold text-[var(--text-main)]">Add Garage</h3>
-              <button
-                onClick={() => { setShowAddModal(false); setForm(EMPTY_FORM); }}
-                className="text-[var(--text-muted)] hover:text-[var(--text-muted)]"
-              >
-                <X className="h-5 w-5" />
-              </button>
+        <FormModal
+          onClose={() => { setShowAddModal(false); setForm(EMPTY_FORM); }}
+          title="Add Garage"
+        >
+          <div className="space-y-5">
+            <FormField label="Garage Name" required>
+              <TextInput
+                type="text"
+                value={form.name}
+                onChange={e => setForm({ ...form, name: e.target.value })}
+                placeholder="e.g. Autopro Service Centre"
+              />
+            </FormField>
+
+            <FormField label="Location">
+              <TextInput
+                type="text"
+                value={form.location}
+                onChange={e => setForm({ ...form, location: e.target.value })}
+                placeholder="e.g. Musaffah, Abu Dhabi"
+              />
+            </FormField>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <FormField label="Contact Person">
+                <TextInput
+                  type="text"
+                  value={form.contactPerson}
+                  onChange={e => setForm({ ...form, contactPerson: e.target.value })}
+                />
+              </FormField>
+              <FormField label="Designation">
+                <TextInput
+                  type="text"
+                  value={form.designation}
+                  onChange={e => setForm({ ...form, designation: e.target.value })}
+                />
+              </FormField>
             </div>
 
-            <div className="p-6 space-y-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <FormField label="Email">
+                <TextInput
+                  type="email"
+                  value={form.email}
+                  onChange={e => setForm({ ...form, email: e.target.value })}
+                />
+              </FormField>
               <div>
-                <label className="block text-sm font-medium text-[var(--text-muted)] mb-2">Garage Name *</label>
-                <input
-                  type="text"
-                  value={form.name}
-                  onChange={e => setForm({ ...form, name: e.target.value })}
-                  className="w-full rounded-lg border border-[var(--border-subtle)] px-3 py-2 bg-[var(--bg-surface)] text-[var(--text-main)]"
-                  placeholder="e.g. Autopro Service Centre"
+                <label className="block text-xs font-semibold text-[var(--text-main)] mb-2">Contact Number</label>
+                <PhoneInput
+                  value={form.contactNumber}
+                  onChange={(val) => setForm(f => ({ ...f, contactNumber: val }))}
+                  placeholder="50 123 4567"
                 />
               </div>
-
-              <div>
-                <label className="block text-sm font-medium text-[var(--text-muted)] mb-2">Location</label>
-                <input
-                  type="text"
-                  value={form.location}
-                  onChange={e => setForm({ ...form, location: e.target.value })}
-                  className="w-full rounded-lg border border-[var(--border-subtle)] px-3 py-2 bg-[var(--bg-surface)] text-[var(--text-main)]"
-                  placeholder="e.g. Musaffah, Abu Dhabi"
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-[var(--text-muted)] mb-2">Contact Person</label>
-                  <input
-                    type="text"
-                    value={form.contactPerson}
-                    onChange={e => setForm({ ...form, contactPerson: e.target.value })}
-                    className="w-full rounded-lg border border-[var(--border-subtle)] px-3 py-2 bg-[var(--bg-surface)] text-[var(--text-main)]"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-[var(--text-muted)] mb-2">Designation</label>
-                  <input
-                    type="text"
-                    value={form.designation}
-                    onChange={e => setForm({ ...form, designation: e.target.value })}
-                    className="w-full rounded-lg border border-[var(--border-subtle)] px-3 py-2 bg-[var(--bg-surface)] text-[var(--text-main)]"
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-[var(--text-muted)] mb-2">Email</label>
-                  <input
-                    type="email"
-                    value={form.email}
-                    onChange={e => setForm({ ...form, email: e.target.value })}
-                    className="w-full rounded-lg border border-[var(--border-subtle)] px-3 py-2 bg-[var(--bg-surface)] text-[var(--text-main)]"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-[var(--text-muted)] mb-2">Contact Number</label>
-                  <PhoneInput
-                    value={form.contactNumber}
-                    onChange={(val) => setForm(f => ({ ...f, contactNumber: val }))}
-                    placeholder="50 123 4567"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-[var(--text-muted)] mb-2">Specialties</label>
-                <input
-                  type="text"
-                  value={form.specialties}
-                  onChange={e => setForm({ ...form, specialties: e.target.value })}
-                  className="w-full rounded-lg border border-[var(--border-subtle)] px-3 py-2 bg-[var(--bg-surface)] text-[var(--text-main)]"
-                  placeholder="Comma-separated, e.g. General, Electrical, Heavy Vehicles"
-                />
-              </div>
-
-              <label className="flex items-center gap-2 text-sm text-[var(--text-muted)]">
-                <input
-                  type="checkbox"
-                  checked={form.isInternal}
-                  onChange={e => setForm({ ...form, isInternal: e.target.checked })}
-                  className="h-4 w-4 rounded border-[var(--border-subtle)]"
-                />
-                Internal garage (owned/operated in-house)
-              </label>
             </div>
 
-            <div className="p-6 border-t border-[var(--border-subtle)] flex justify-end gap-3">
-              <button
-                onClick={() => { setShowAddModal(false); setForm(EMPTY_FORM); }}
-                className="rounded-lg px-4 py-2 text-sm font-medium text-[var(--text-muted)] hover:bg-[var(--bg-surface-hover)]"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleAddGarage}
-                disabled={saving || !form.name.trim()}
-                className="rounded-lg bg-blue-600 px-6 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:bg-blue-300 disabled:cursor-not-allowed"
-              >
-                {saving ? 'Saving...' : 'Add Garage'}
-              </button>
-            </div>
+            <FormField label="Specialties">
+              <TextInput
+                type="text"
+                value={form.specialties}
+                onChange={e => setForm({ ...form, specialties: e.target.value })}
+                placeholder="Comma-separated, e.g. General, Electrical, Heavy Vehicles"
+              />
+            </FormField>
+
+            <label className="flex items-center gap-2 text-sm text-[var(--text-muted)]">
+              <input
+                type="checkbox"
+                checked={form.isInternal}
+                onChange={e => setForm({ ...form, isInternal: e.target.checked })}
+                className="h-4 w-4 rounded border-[var(--border-subtle)]"
+              />
+              Internal garage (owned/operated in-house)
+            </label>
           </div>
-        </div>
+
+          <FormFooter secondary={<SecondaryButton onClick={() => { setShowAddModal(false); setForm(EMPTY_FORM); }}>Cancel</SecondaryButton>}>
+            <PrimaryButton onClick={handleAddGarage} disabled={saving || !form.name.trim()}>{saving ? 'Saving...' : 'Add Garage'}</PrimaryButton>
+          </FormFooter>
+        </FormModal>
       )}
     </div>
   );

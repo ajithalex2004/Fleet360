@@ -2,6 +2,8 @@
 
 import React, { useState, useEffect } from 'react';
 
+import { FormField, FormFooter, FormSection, PrimaryButton, SecondaryButton, TextInput } from '@/components/ui/form-kit';
+import { FormModal } from '@/components/ui/form-modal';
 interface TrainingRecord {
   id: string;
   driver: string;
@@ -196,93 +198,70 @@ export default function TrainingTracker() {
 
       {/* Modal */}
       {showModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
-          <div className="bg-[var(--bg-surface-elevated)] border border-[var(--border-subtle)] rounded-2xl p-8 max-w-md w-full">
-            <h2 className="text-2xl font-bold text-[var(--text-main)] mb-6">New Training Record</h2>
-
-            <form onSubmit={handleAddTraining} className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-[var(--text-muted)] mb-2">Driver</label>
-                <input
+        <FormModal
+          onClose={() => setShowModal(false)}
+          title="New Training Record"
+          size="sm"
+        >
+          <form onSubmit={handleAddTraining} className="space-y-5">
+            <FormSection title="Training details" columns={1}>
+              <FormField label="Driver" required>
+                <TextInput
                   type="text"
                   value={formData.driver}
                   onChange={(e) => setFormData({ ...formData, driver: e.target.value })}
-                  className="w-full bg-[var(--input-bg)] border border-[var(--border-subtle)] rounded-xl px-4 py-2 text-[var(--text-main)] focus:outline-none focus:ring-2 focus:ring-cyan-500"
                   required
                 />
-              </div>
+              </FormField>
 
-              <div>
-                <label className="block text-sm font-medium text-[var(--text-muted)] mb-2">Course Name</label>
-                <input
+              <FormField label="Course Name" required>
+                <TextInput
                   type="text"
                   value={formData.courseName}
                   onChange={(e) => setFormData({ ...formData, courseName: e.target.value })}
-                  className="w-full bg-[var(--input-bg)] border border-[var(--border-subtle)] rounded-xl px-4 py-2 text-[var(--text-main)] focus:outline-none focus:ring-2 focus:ring-cyan-500"
                   required
                 />
-              </div>
+              </FormField>
 
-              <div>
-                <label className="block text-sm font-medium text-[var(--text-muted)] mb-2">Provider</label>
-                <input
+              <FormField label="Provider" required>
+                <TextInput
                   type="text"
                   value={formData.provider}
                   onChange={(e) => setFormData({ ...formData, provider: e.target.value })}
-                  className="w-full bg-[var(--input-bg)] border border-[var(--border-subtle)] rounded-xl px-4 py-2 text-[var(--text-main)] focus:outline-none focus:ring-2 focus:ring-cyan-500"
                   required
                 />
-              </div>
+              </FormField>
 
-              <div>
-                <label className="block text-sm font-medium text-[var(--text-muted)] mb-2">Completed Date</label>
-                <input
+              <FormField label="Completed Date">
+                <TextInput
                   type="date"
                   value={formData.completedDate}
                   onChange={(e) => setFormData({ ...formData, completedDate: e.target.value })}
-                  className="w-full bg-[var(--input-bg)] border border-[var(--border-subtle)] rounded-xl px-4 py-2 text-[var(--text-main)] focus:outline-none focus:ring-2 focus:ring-cyan-500"
                 />
-              </div>
+              </FormField>
 
-              <div>
-                <label className="block text-sm font-medium text-[var(--text-muted)] mb-2">Expiry Date</label>
-                <input
+              <FormField label="Expiry Date">
+                <TextInput
                   type="date"
                   value={formData.expiryDate}
                   onChange={(e) => setFormData({ ...formData, expiryDate: e.target.value })}
-                  className="w-full bg-[var(--input-bg)] border border-[var(--border-subtle)] rounded-xl px-4 py-2 text-[var(--text-main)] focus:outline-none focus:ring-2 focus:ring-cyan-500"
                 />
-              </div>
+              </FormField>
 
-              <div>
-                <label className="block text-sm font-medium text-[var(--text-muted)] mb-2">Certificate</label>
-                <input
+              <FormField label="Certificate">
+                <TextInput
                   type="text"
                   value={formData.certificate}
                   onChange={(e) => setFormData({ ...formData, certificate: e.target.value })}
-                  className="w-full bg-[var(--input-bg)] border border-[var(--border-subtle)] rounded-xl px-4 py-2 text-[var(--text-main)] focus:outline-none focus:ring-2 focus:ring-cyan-500"
                   placeholder="Certificate URL or ID"
                 />
-              </div>
-
-              <div className="flex gap-3 pt-4">
-                <button
-                  type="submit"
-                  className="flex-1 rounded-xl bg-gradient-to-r from-cyan-600 to-teal-600 px-4 py-2 text-sm font-medium text-white hover:shadow-lg hover:shadow-cyan-500/20 transition-all"
-                >
-                  Add Training
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setShowModal(false)}
-                  className="flex-1 rounded-xl bg-[var(--bg-surface-hover)] px-4 py-2 text-sm font-medium text-[var(--text-muted)] hover:bg-[var(--bg-surface-elevated)] transition-all"
-                >
-                  Cancel
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
+              </FormField>
+            </FormSection>
+            <FormFooter secondary={<SecondaryButton type="button" onClick={() => setShowModal(false)}>Cancel</SecondaryButton>}>
+              <PrimaryButton type="submit">Add Training</PrimaryButton>
+            </FormFooter>
+          </form>
+        </FormModal>
       )}
     </div>
   );

@@ -2,6 +2,8 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { VehicleRef } from '@/components/ui/EntityRef';
 
+import { FormAlert, FormField, FormFooter, FormSection, PrimaryButton, SecondaryButton, SelectInput, TextAreaInput, TextInput } from '@/components/ui/form-kit';
+import { FormModal } from '@/components/ui/form-modal';
 interface InsurancePolicy {
   id: string;
   vehicleId: string;
@@ -187,7 +189,6 @@ export default function InsurancePage() {
   };
 
   const inputCls = 'bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-xl px-4 py-2.5 text-[var(--text-main)] text-sm focus:border-orange-500/50 focus:outline-none w-full';
-  const labelCls = 'block text-xs text-[var(--text-muted)] mb-1';
 
   return (
     <div className="space-y-6">
@@ -218,11 +219,7 @@ export default function InsurancePage() {
       )}
 
       {/* Error */}
-      {error && (
-        <div className="bg-red-500/10 border border-red-500/30 text-red-400 px-4 py-3 rounded-xl text-sm mb-4">
-          {error}
-        </div>
-      )}
+      {error && <FormAlert>{error}</FormAlert>}
 
       {/* Filter Bar */}
       <div className="bg-[var(--bg-surface)]/40 border border-[var(--border-subtle)] rounded-2xl p-4 mb-6 flex flex-wrap gap-3">
@@ -345,101 +342,68 @@ export default function InsurancePage() {
 
       {/* Create / Edit Modal */}
       {showModal && (
-        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
-            <div className="flex items-center justify-between px-6 py-4 border-b border-[var(--border-subtle)]">
-              <h2 className="text-lg font-semibold text-[var(--text-main)]">{editingId ? 'Edit Insurance Policy' : 'Add Insurance Policy'}</h2>
-              <button onClick={() => setShowModal(false)} className="text-[var(--text-muted)] hover:text-[var(--text-main)] transition-colors text-xl leading-none">&times;</button>
-            </div>
-            <div className="px-6 py-5 space-y-6">
-              {formError && (
-                <div className="bg-red-500/10 border border-red-500/30 text-red-400 px-4 py-3 rounded-xl text-sm">
-                  {formError}
-                </div>
-              )}
+        <FormModal
+          onClose={() => setShowModal(false)}
+          title={editingId ? 'Edit Insurance Policy' : 'Add Insurance Policy'}
+          size="lg"
+        >
+          <div className="space-y-5">
+            {formError && <FormAlert>{formError}</FormAlert>}
 
-              <div>
-                <p className="text-sm font-semibold text-orange-400 uppercase tracking-wider mb-4">Policy Details</p>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div>
-                    <label className={labelCls}>Vehicle ID *</label>
-                    <input type="text" value={formData.vehicleId} onChange={e => setFormData(f => ({ ...f, vehicleId: e.target.value }))} className={inputCls} placeholder="e.g. VH-001" />
-                  </div>
-                  <div>
-                    <label className={labelCls}>Policy Number *</label>
-                    <input type="text" value={formData.policyNumber} onChange={e => setFormData(f => ({ ...f, policyNumber: e.target.value }))} className={inputCls} placeholder="Policy number" />
-                  </div>
-                  <div>
-                    <label className={labelCls}>Insurer</label>
-                    <input type="text" value={formData.insurer} onChange={e => setFormData(f => ({ ...f, insurer: e.target.value }))} className={inputCls} placeholder="Insurance company name" />
-                  </div>
-                  <div>
-                    <label className={labelCls}>Policy Type</label>
-                    <select value={formData.policyType} onChange={e => setFormData(f => ({ ...f, policyType: e.target.value }))} className={inputCls}>
-                      {POLICY_TYPES.map(t => <option key={t}>{t}</option>)}
-                    </select>
-                  </div>
-                </div>
-              </div>
+            <FormSection title="Policy Details" columns={2}>
+              <FormField label="Vehicle ID" required>
+                <TextInput type="text" value={formData.vehicleId} onChange={e => setFormData(f => ({ ...f, vehicleId: e.target.value }))} placeholder="e.g. VH-001" />
+              </FormField>
+              <FormField label="Policy Number" required>
+                <TextInput type="text" value={formData.policyNumber} onChange={e => setFormData(f => ({ ...f, policyNumber: e.target.value }))} placeholder="Policy number" />
+              </FormField>
+              <FormField label="Insurer">
+                <TextInput type="text" value={formData.insurer} onChange={e => setFormData(f => ({ ...f, insurer: e.target.value }))} placeholder="Insurance company name" />
+              </FormField>
+              <FormField label="Policy Type">
+                <SelectInput value={formData.policyType} onChange={e => setFormData(f => ({ ...f, policyType: e.target.value }))}>
+                  {POLICY_TYPES.map(t => <option key={t}>{t}</option>)}
+                </SelectInput>
+              </FormField>
+            </FormSection>
 
-              <div>
-                <p className="text-sm font-semibold text-orange-400 uppercase tracking-wider mb-4">Coverage Period</p>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div>
-                    <label className={labelCls}>Start Date</label>
-                    <input type="date" value={formData.startDate} onChange={e => setFormData(f => ({ ...f, startDate: e.target.value }))} className={inputCls} />
-                  </div>
-                  <div>
-                    <label className={labelCls}>End Date *</label>
-                    <input type="date" value={formData.endDate} onChange={e => setFormData(f => ({ ...f, endDate: e.target.value }))} className={inputCls} />
-                  </div>
-                  <div>
-                    <label className={labelCls}>Renewal Reminder (days before expiry)</label>
-                    <input type="number" value={formData.renewalReminderDays} onChange={e => setFormData(f => ({ ...f, renewalReminderDays: Number(e.target.value) }))} className={inputCls} min={1} max={365} />
-                  </div>
-                </div>
-              </div>
+            <FormSection title="Coverage Period" columns={2}>
+              <FormField label="Start Date">
+                <TextInput type="date" value={formData.startDate} onChange={e => setFormData(f => ({ ...f, startDate: e.target.value }))} />
+              </FormField>
+              <FormField label="End Date" required>
+                <TextInput type="date" value={formData.endDate} onChange={e => setFormData(f => ({ ...f, endDate: e.target.value }))} />
+              </FormField>
+              <FormField label="Renewal Reminder (days before expiry)">
+                <TextInput type="number" value={formData.renewalReminderDays} onChange={e => setFormData(f => ({ ...f, renewalReminderDays: Number(e.target.value) }))} min={1} max={365} />
+              </FormField>
+            </FormSection>
 
-              <div>
-                <p className="text-sm font-semibold text-orange-400 uppercase tracking-wider mb-4">Financial</p>
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                  <div>
-                    <label className={labelCls}>Premium Amount (AED)</label>
-                    <input type="number" value={formData.premiumAmount} onChange={e => setFormData(f => ({ ...f, premiumAmount: Number(e.target.value) }))} className={inputCls} min={0} step={0.01} />
-                  </div>
-                  <div>
-                    <label className={labelCls}>Coverage Amount (AED)</label>
-                    <input type="number" value={formData.coverageAmount} onChange={e => setFormData(f => ({ ...f, coverageAmount: Number(e.target.value) }))} className={inputCls} min={0} step={0.01} />
-                  </div>
-                  <div>
-                    <label className={labelCls}>Deductible (AED)</label>
-                    <input type="number" value={formData.deductible} onChange={e => setFormData(f => ({ ...f, deductible: Number(e.target.value) }))} className={inputCls} min={0} step={0.01} />
-                  </div>
-                </div>
-              </div>
+            <FormSection title="Financial" columns={3}>
+              <FormField label="Premium Amount (AED)">
+                <TextInput type="number" value={formData.premiumAmount} onChange={e => setFormData(f => ({ ...f, premiumAmount: Number(e.target.value) }))} min={0} step={0.01} />
+              </FormField>
+              <FormField label="Coverage Amount (AED)">
+                <TextInput type="number" value={formData.coverageAmount} onChange={e => setFormData(f => ({ ...f, coverageAmount: Number(e.target.value) }))} min={0} step={0.01} />
+              </FormField>
+              <FormField label="Deductible (AED)">
+                <TextInput type="number" value={formData.deductible} onChange={e => setFormData(f => ({ ...f, deductible: Number(e.target.value) }))} min={0} step={0.01} />
+              </FormField>
+            </FormSection>
 
-              <div>
-                <p className="text-sm font-semibold text-orange-400 uppercase tracking-wider mb-4">Additional Info</p>
-                <div className="space-y-4">
-                  <div>
-                    <label className={labelCls}>Document URL</label>
-                    <input type="url" value={formData.documentUrl} onChange={e => setFormData(f => ({ ...f, documentUrl: e.target.value }))} className={inputCls} placeholder="https://..." />
-                  </div>
-                  <div>
-                    <label className={labelCls}>Notes</label>
-                    <textarea value={formData.notes} onChange={e => setFormData(f => ({ ...f, notes: e.target.value }))} className={`${inputCls} resize-none h-16`} placeholder="Additional notes..." />
-                  </div>
-                </div>
-              </div>
-            </div>
-            <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-[var(--border-subtle)]">
-              <button onClick={() => setShowModal(false)} className="px-4 py-2.5 bg-[var(--bg-surface-hover)] hover:bg-[var(--bg-surface-hover)] text-[var(--text-main)] rounded-xl text-sm font-medium transition-colors">Cancel</button>
-              <button onClick={handleSave} disabled={saving} className="px-6 py-2.5 bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-600 hover:to-amber-600 disabled:opacity-50 text-white rounded-xl text-sm font-semibold transition-all">
-                {saving ? 'Saving...' : editingId ? 'Update Policy' : 'Add Policy'}
-              </button>
-            </div>
+            <FormSection title="Additional Info" columns={1}>
+              <FormField label="Document URL">
+                <TextInput type="url" value={formData.documentUrl} onChange={e => setFormData(f => ({ ...f, documentUrl: e.target.value }))} placeholder="https://..." />
+              </FormField>
+              <FormField label="Notes">
+                <TextAreaInput value={formData.notes} onChange={e => setFormData(f => ({ ...f, notes: e.target.value }))} className={`${inputCls} resize-none h-16`} placeholder="Additional notes..." />
+              </FormField>
+            </FormSection>
           </div>
-        </div>
+          <FormFooter secondary={<SecondaryButton onClick={() => setShowModal(false)}>Cancel</SecondaryButton>}>
+            <PrimaryButton onClick={handleSave} disabled={saving}>{saving ? 'Saving...' : editingId ? 'Update Policy' : 'Add Policy'}</PrimaryButton>
+          </FormFooter>
+        </FormModal>
       )}
     </div>
   );

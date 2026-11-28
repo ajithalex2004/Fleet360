@@ -15,9 +15,10 @@ import {
   CheckCircle2,
   XCircle,
   FileText,
-  X,
 } from 'lucide-react';
 
+import { FormField, FormFooter, FormSection, PrimaryButton, SecondaryButton, SelectInput, TextInput } from '@/components/ui/form-kit';
+import { FormModal } from '@/components/ui/form-modal';
 interface VehicleDocumentItem {
   id: string;
   vehicleId: string;
@@ -454,41 +455,29 @@ export default function FleetDocumentsPage() {
 
       {/* Upload/Renew Document Modal */}
       {showModal && (
-        <div className="fixed inset-0 z-50 bg-[var(--bg-canvas)]/80 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-2xl max-w-lg w-full p-6 space-y-4 shadow-2xl">
-            <div className="flex items-center justify-between border-b border-[var(--border-subtle)] pb-3">
-              <h3 className="text-base font-bold text-[var(--text-main)] flex items-center gap-2">
-                <FileText className="w-5 h-5 text-cyan-400" />
-                Register / Renew Fleet Document
-              </h3>
-              <button
-                onClick={() => setShowModal(false)}
-                className="p-1 rounded-lg hover:bg-[var(--bg-surface-hover)] text-[var(--text-muted)] hover:text-[var(--text-main)] transition"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            <form onSubmit={handleAddDocument} className="space-y-3 text-xs">
-              <div>
-                <label className="block text-[var(--text-muted)] mb-1">Vehicle ID / UUID</label>
-                <input
+        <FormModal
+          onClose={() => setShowModal(false)}
+          title="Register / Renew Fleet Document"
+          icon={FileText}
+          accent="cyan"
+        >
+          <form onSubmit={handleAddDocument} className="space-y-5">
+            <FormSection title="Document details" columns={1}>
+              <FormField label="Vehicle ID / UUID" required>
+                <TextInput
                   type="text"
                   required
                   placeholder="Vehicle UUID..."
                   value={formData.vehicleId}
                   onChange={(e) => setFormData({ ...formData, vehicleId: e.target.value })}
-                  className="w-full px-3 py-2 rounded-xl bg-[var(--bg-canvas)] border border-[var(--border-subtle)] text-[var(--text-main)] focus:outline-none focus:border-cyan-500"
                 />
-              </div>
+              </FormField>
 
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-[var(--text-muted)] mb-1">Document Type</label>
-                  <select
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <FormField label="Document Type">
+                  <SelectInput
                     value={formData.docType}
                     onChange={(e) => setFormData({ ...formData, docType: e.target.value })}
-                    className="w-full px-3 py-2 rounded-xl bg-[var(--bg-canvas)] border border-[var(--border-subtle)] text-[var(--text-main)] focus:outline-none focus:border-cyan-500"
                   >
                     <option value="MULKIYA">Mulkiya (Registration)</option>
                     <option value="INSURANCE">Insurance Policy</option>
@@ -496,74 +485,53 @@ export default function FleetDocumentsPage() {
                     <option value="PERMIT">Commercial Permit</option>
                     <option value="CIVIL_DEFENSE">Civil Defense</option>
                     <option value="OTHER">Other</option>
-                  </select>
-                </div>
+                  </SelectInput>
+                </FormField>
 
-                <div>
-                  <label className="block text-[var(--text-muted)] mb-1">Document Number</label>
-                  <input
+                <FormField label="Document Number" required>
+                  <TextInput
                     type="text"
                     required
                     placeholder="e.g. POL-984214"
                     value={formData.docNumber}
                     onChange={(e) => setFormData({ ...formData, docNumber: e.target.value })}
-                    className="w-full px-3 py-2 rounded-xl bg-[var(--bg-canvas)] border border-[var(--border-subtle)] text-[var(--text-main)] focus:outline-none focus:border-cyan-500"
                   />
-                </div>
+                </FormField>
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-[var(--text-muted)] mb-1">Issue Date</label>
-                  <input
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <FormField label="Issue Date">
+                  <TextInput
                     type="date"
                     value={formData.issueDate}
                     onChange={(e) => setFormData({ ...formData, issueDate: e.target.value })}
-                    className="w-full px-3 py-2 rounded-xl bg-[var(--bg-canvas)] border border-[var(--border-subtle)] text-[var(--text-main)] focus:outline-none focus:border-cyan-500"
                   />
-                </div>
+                </FormField>
 
-                <div>
-                  <label className="block text-[var(--text-muted)] mb-1">Expiry Date</label>
-                  <input
+                <FormField label="Expiry Date" required>
+                  <TextInput
                     type="date"
                     required
                     value={formData.expiryDate}
                     onChange={(e) => setFormData({ ...formData, expiryDate: e.target.value })}
-                    className="w-full px-3 py-2 rounded-xl bg-[var(--bg-canvas)] border border-[var(--border-subtle)] text-[var(--text-main)] focus:outline-none focus:border-cyan-500"
                   />
-                </div>
+                </FormField>
               </div>
 
-              <div>
-                <label className="block text-[var(--text-muted)] mb-1">Issued By Authority</label>
-                <input
+              <FormField label="Issued By Authority">
+                <TextInput
                   type="text"
                   placeholder="e.g. Dubai RTA, Abu Dhabi Police, Sukoon Insurance"
                   value={formData.issuedBy}
                   onChange={(e) => setFormData({ ...formData, issuedBy: e.target.value })}
-                  className="w-full px-3 py-2 rounded-xl bg-[var(--bg-canvas)] border border-[var(--border-subtle)] text-[var(--text-main)] focus:outline-none focus:border-cyan-500"
                 />
-              </div>
-
-              <div className="flex justify-end gap-2 pt-2">
-                <button
-                  type="button"
-                  onClick={() => setShowModal(false)}
-                  className="px-4 py-2 rounded-xl bg-[var(--bg-surface)] text-[var(--text-muted)] font-semibold hover:bg-[var(--bg-surface-hover)] transition"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className="px-4 py-2 rounded-xl bg-cyan-500 text-white font-bold hover:bg-cyan-400 transition"
-                >
-                  Save & Validate Compliance
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
+              </FormField>
+            </FormSection>
+            <FormFooter secondary={<SecondaryButton type="button" onClick={() => setShowModal(false)}>Cancel</SecondaryButton>}>
+              <PrimaryButton type="submit">Save & Validate Compliance</PrimaryButton>
+            </FormFooter>
+          </form>
+        </FormModal>
       )}
     </div>
   );

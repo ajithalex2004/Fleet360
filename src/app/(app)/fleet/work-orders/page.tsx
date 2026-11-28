@@ -2,6 +2,8 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { VehicleRef } from '@/components/ui/EntityRef';
 
+import { FormAlert, FormField, FormFooter, FormSection, PrimaryButton, SecondaryButton, SelectInput, TextAreaInput, TextInput } from '@/components/ui/form-kit';
+import { FormModal } from '@/components/ui/form-modal';
 interface WorkOrder {
   id: string;
   woNumber: string;
@@ -207,11 +209,7 @@ export default function WorkOrdersPage() {
       </div>
 
       {/* Error */}
-      {error && (
-        <div className="bg-red-500/10 border border-red-500/30 text-red-400 px-4 py-3 rounded-xl text-sm mb-4">
-          {error}
-        </div>
-      )}
+      {error && <FormAlert>{error}</FormAlert>}
 
       {/* Filter Bar */}
       <div className="bg-[var(--bg-surface)]/40 border border-[var(--border-subtle)] rounded-2xl p-4 mb-6 flex flex-wrap gap-3">
@@ -345,275 +343,203 @@ export default function WorkOrdersPage() {
 
       {/* Modal */}
       {showModal && (
-        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-2xl w-full max-w-3xl max-h-[90vh] overflow-y-auto">
-            {/* Modal Header */}
-            <div className="flex items-center justify-between px-6 py-4 border-b border-[var(--border-subtle)]">
-              <h2 className="text-lg font-semibold text-[var(--text-main)]">
-                {editingId ? 'Edit Work Order' : 'New Work Order'}
-              </h2>
-              <button onClick={() => setShowModal(false)} className="text-[var(--text-muted)] hover:text-[var(--text-main)] transition-colors text-xl leading-none">&times;</button>
-            </div>
+        <FormModal
+          onClose={() => setShowModal(false)}
+          title={editingId ? 'Edit Work Order' : 'New Work Order'}
+          size="xl"
+        >
+          {/* Modal Body */}
+          <div className="px-6 py-5 space-y-6">
+            {formError && <FormAlert>{formError}</FormAlert>}
 
-            {/* Modal Body */}
-            <div className="px-6 py-5 space-y-6">
-              {formError && (
-                <div className="bg-red-500/10 border border-red-500/30 text-red-400 px-4 py-3 rounded-xl text-sm">
-                  {formError}
-                </div>
-              )}
+            {/* Vehicle & Type */}
+            <FormSection title="Work Order Details" columns={2}>
+              <FormField label="Vehicle ID" required>
+                <TextInput
+                  type="text"
+                  value={formData.vehicleId}
+                  onChange={e => setFormData(f => ({ ...f, vehicleId: e.target.value }))}
+                  placeholder="e.g. VH-001"
+                />
+              </FormField>
+              <FormField label="WO Type">
+                <SelectInput
+                  value={formData.woType}
+                  onChange={e => setFormData(f => ({ ...f, woType: e.target.value }))}
+                >
+                  <option>PREVENTIVE</option>
+                  <option>CORRECTIVE</option>
+                  <option>ACCIDENT</option>
+                  <option>INSPECTION</option>
+                </SelectInput>
+              </FormField>
+              <FormField label="Status">
+                <SelectInput
+                  value={formData.status}
+                  onChange={e => setFormData(f => ({ ...f, status: e.target.value }))}
+                >
+                  <option>DRAFT</option>
+                  <option>OPEN</option>
+                  <option>IN_PROGRESS</option>
+                  <option>COMPLETED</option>
+                  <option>CANCELLED</option>
+                </SelectInput>
+              </FormField>
+              <FormField label="Priority">
+                <SelectInput
+                  value={formData.priority}
+                  onChange={e => setFormData(f => ({ ...f, priority: e.target.value }))}
+                >
+                  <option>HIGH</option>
+                  <option>MEDIUM</option>
+                  <option>LOW</option>
+                </SelectInput>
+              </FormField>
+            </FormSection>
 
-              {/* Vehicle & Type */}
+            {/* Garage */}
+            <FormSection title="Garage Information" columns={2}>
+              <FormField label="Garage Name">
+                <TextInput
+                  type="text"
+                  value={formData.garageName}
+                  onChange={e => setFormData(f => ({ ...f, garageName: e.target.value }))}
+                  placeholder="Garage name"
+                />
+              </FormField>
+              <FormField label="Garage Contact">
+                <TextInput
+                  type="text"
+                  value={formData.garageContact}
+                  onChange={e => setFormData(f => ({ ...f, garageContact: e.target.value }))}
+                  placeholder="Phone or email"
+                />
+              </FormField>
+            </FormSection>
+
+            {/* Dates */}
+            <FormSection title="Dates & Odometer" columns={3}>
+              <FormField label="Scheduled Date">
+                <TextInput
+                  type="date"
+                  value={formData.scheduledDate}
+                  onChange={e => setFormData(f => ({ ...f, scheduledDate: e.target.value }))}
+                />
+              </FormField>
+              <FormField label="Start Date">
+                <TextInput
+                  type="date"
+                  value={formData.startDate}
+                  onChange={e => setFormData(f => ({ ...f, startDate: e.target.value }))}
+                />
+              </FormField>
+              <FormField label="End Date">
+                <TextInput
+                  type="date"
+                  value={formData.endDate}
+                  onChange={e => setFormData(f => ({ ...f, endDate: e.target.value }))}
+                />
+              </FormField>
+              <FormField label="Odometer at Entry (km)">
+                <TextInput
+                  type="number"
+                  value={formData.odometerAtEntry}
+                  onChange={e => setFormData(f => ({ ...f, odometerAtEntry: Number(e.target.value) }))}
+                  min={0}
+                />
+              </FormField>
+            </FormSection>
+
+            {/* Costs */}
+            <FormSection title="Financial" columns={3}>
+              <FormField label="Authorized PO Amount (AED)">
+                <TextInput
+                  type="number"
+                  value={formData.authorizedPoAmount}
+                  onChange={e => setFormData(f => ({ ...f, authorizedPoAmount: Number(e.target.value) }))}
+                  min={0}
+                  step={0.01}
+                />
+              </FormField>
+              <FormField label="Actual Cost (AED)">
+                <TextInput
+                  type="number"
+                  value={formData.actualCost}
+                  onChange={e => setFormData(f => ({ ...f, actualCost: Number(e.target.value) }))}
+                  min={0}
+                  step={0.01}
+                />
+              </FormField>
               <div>
-                <p className="text-sm font-semibold text-orange-400 uppercase tracking-wider mb-4">Work Order Details</p>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div>
-                    <label className={labelCls}>Vehicle ID *</label>
-                    <input
-                      type="text"
-                      value={formData.vehicleId}
-                      onChange={e => setFormData(f => ({ ...f, vehicleId: e.target.value }))}
-                      className={inputCls}
-                      placeholder="e.g. VH-001"
-                    />
-                  </div>
-                  <div>
-                    <label className={labelCls}>WO Type</label>
-                    <select
-                      value={formData.woType}
-                      onChange={e => setFormData(f => ({ ...f, woType: e.target.value }))}
-                      className={inputCls}
-                    >
-                      <option>PREVENTIVE</option>
-                      <option>CORRECTIVE</option>
-                      <option>ACCIDENT</option>
-                      <option>INSPECTION</option>
-                    </select>
-                  </div>
-                  <div>
-                    <label className={labelCls}>Status</label>
-                    <select
-                      value={formData.status}
-                      onChange={e => setFormData(f => ({ ...f, status: e.target.value }))}
-                      className={inputCls}
-                    >
-                      <option>DRAFT</option>
-                      <option>OPEN</option>
-                      <option>IN_PROGRESS</option>
-                      <option>COMPLETED</option>
-                      <option>CANCELLED</option>
-                    </select>
-                  </div>
-                  <div>
-                    <label className={labelCls}>Priority</label>
-                    <select
-                      value={formData.priority}
-                      onChange={e => setFormData(f => ({ ...f, priority: e.target.value }))}
-                      className={inputCls}
-                    >
-                      <option>HIGH</option>
-                      <option>MEDIUM</option>
-                      <option>LOW</option>
-                    </select>
-                  </div>
+                <label className={labelCls}>Variance (AED)</label>
+                <div className={`${inputCls} ${computedVariance > 0 ? 'text-red-400' : computedVariance < 0 ? 'text-amber-400' : 'text-green-400'} cursor-not-allowed opacity-70`}>
+                  {computedVariance >= 0 ? '+' : ''}{computedVariance.toFixed(2)}
                 </div>
               </div>
+            </FormSection>
 
-              {/* Garage */}
-              <div>
-                <p className="text-sm font-semibold text-orange-400 uppercase tracking-wider mb-4">Garage Information</p>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div>
-                    <label className={labelCls}>Garage Name</label>
-                    <input
-                      type="text"
-                      value={formData.garageName}
-                      onChange={e => setFormData(f => ({ ...f, garageName: e.target.value }))}
-                      className={inputCls}
-                      placeholder="Garage name"
-                    />
-                  </div>
-                  <div>
-                    <label className={labelCls}>Garage Contact</label>
-                    <input
-                      type="text"
-                      value={formData.garageContact}
-                      onChange={e => setFormData(f => ({ ...f, garageContact: e.target.value }))}
-                      className={inputCls}
-                      placeholder="Phone or email"
-                    />
-                  </div>
-                </div>
-              </div>
+            {/* People */}
+            <FormSection title="Authorization" columns={2}>
+              <FormField label="Requested By">
+                <TextInput
+                  type="text"
+                  value={formData.requestedBy}
+                  onChange={e => setFormData(f => ({ ...f, requestedBy: e.target.value }))}
+                  placeholder="Name"
+                />
+              </FormField>
+              <FormField label="Approved By">
+                <TextInput
+                  type="text"
+                  value={formData.approvedBy}
+                  onChange={e => setFormData(f => ({ ...f, approvedBy: e.target.value }))}
+                  placeholder="Name"
+                />
+              </FormField>
+            </FormSection>
 
-              {/* Dates */}
-              <div>
-                <p className="text-sm font-semibold text-orange-400 uppercase tracking-wider mb-4">Dates & Odometer</p>
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                  <div>
-                    <label className={labelCls}>Scheduled Date</label>
-                    <input
-                      type="date"
-                      value={formData.scheduledDate}
-                      onChange={e => setFormData(f => ({ ...f, scheduledDate: e.target.value }))}
-                      className={inputCls}
-                    />
-                  </div>
-                  <div>
-                    <label className={labelCls}>Start Date</label>
-                    <input
-                      type="date"
-                      value={formData.startDate}
-                      onChange={e => setFormData(f => ({ ...f, startDate: e.target.value }))}
-                      className={inputCls}
-                    />
-                  </div>
-                  <div>
-                    <label className={labelCls}>End Date</label>
-                    <input
-                      type="date"
-                      value={formData.endDate}
-                      onChange={e => setFormData(f => ({ ...f, endDate: e.target.value }))}
-                      className={inputCls}
-                    />
-                  </div>
-                  <div>
-                    <label className={labelCls}>Odometer at Entry (km)</label>
-                    <input
-                      type="number"
-                      value={formData.odometerAtEntry}
-                      onChange={e => setFormData(f => ({ ...f, odometerAtEntry: Number(e.target.value) }))}
-                      className={inputCls}
-                      min={0}
-                    />
-                  </div>
-                </div>
-              </div>
-
-              {/* Costs */}
-              <div>
-                <p className="text-sm font-semibold text-orange-400 uppercase tracking-wider mb-4">Financial</p>
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                  <div>
-                    <label className={labelCls}>Authorized PO Amount (AED)</label>
-                    <input
-                      type="number"
-                      value={formData.authorizedPoAmount}
-                      onChange={e => setFormData(f => ({ ...f, authorizedPoAmount: Number(e.target.value) }))}
-                      className={inputCls}
-                      min={0}
-                      step={0.01}
-                    />
-                  </div>
-                  <div>
-                    <label className={labelCls}>Actual Cost (AED)</label>
-                    <input
-                      type="number"
-                      value={formData.actualCost}
-                      onChange={e => setFormData(f => ({ ...f, actualCost: Number(e.target.value) }))}
-                      className={inputCls}
-                      min={0}
-                      step={0.01}
-                    />
-                  </div>
-                  <div>
-                    <label className={labelCls}>Variance (AED)</label>
-                    <div className={`${inputCls} ${computedVariance > 0 ? 'text-red-400' : computedVariance < 0 ? 'text-amber-400' : 'text-green-400'} cursor-not-allowed opacity-70`}>
-                      {computedVariance >= 0 ? '+' : ''}{computedVariance.toFixed(2)}
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              {/* People */}
-              <div>
-                <p className="text-sm font-semibold text-orange-400 uppercase tracking-wider mb-4">Authorization</p>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div>
-                    <label className={labelCls}>Requested By</label>
-                    <input
-                      type="text"
-                      value={formData.requestedBy}
-                      onChange={e => setFormData(f => ({ ...f, requestedBy: e.target.value }))}
-                      className={inputCls}
-                      placeholder="Name"
-                    />
-                  </div>
-                  <div>
-                    <label className={labelCls}>Approved By</label>
-                    <input
-                      type="text"
-                      value={formData.approvedBy}
-                      onChange={e => setFormData(f => ({ ...f, approvedBy: e.target.value }))}
-                      className={inputCls}
-                      placeholder="Name"
-                    />
-                  </div>
-                </div>
-              </div>
-
-              {/* Descriptions */}
-              <div>
-                <p className="text-sm font-semibold text-orange-400 uppercase tracking-wider mb-4">Details</p>
-                <div className="space-y-4">
-                  <div>
-                    <label className={labelCls}>Description</label>
-                    <textarea
-                      value={formData.description}
-                      onChange={e => setFormData(f => ({ ...f, description: e.target.value }))}
-                      className={`${inputCls} resize-none h-20`}
-                      placeholder="Describe the work required..."
-                    />
-                  </div>
-                  <div>
-                    <label className={labelCls}>Findings</label>
-                    <textarea
-                      value={formData.findings}
-                      onChange={e => setFormData(f => ({ ...f, findings: e.target.value }))}
-                      className={`${inputCls} resize-none h-20`}
-                      placeholder="Findings from inspection..."
-                    />
-                  </div>
-                  <div>
-                    <label className={labelCls}>Actions Taken</label>
-                    <textarea
-                      value={formData.actionsTaken}
-                      onChange={e => setFormData(f => ({ ...f, actionsTaken: e.target.value }))}
-                      className={`${inputCls} resize-none h-20`}
-                      placeholder="Actions performed..."
-                    />
-                  </div>
-                  <div>
-                    <label className={labelCls}>Notes</label>
-                    <textarea
-                      value={formData.notes}
-                      onChange={e => setFormData(f => ({ ...f, notes: e.target.value }))}
-                      className={`${inputCls} resize-none h-16`}
-                      placeholder="Additional notes..."
-                    />
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* Modal Footer */}
-            <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-[var(--border-subtle)]">
-              <button
-                onClick={() => setShowModal(false)}
-                className="px-4 py-2.5 bg-[var(--bg-surface-hover)] hover:bg-[var(--bg-surface-hover)] text-[var(--text-main)] rounded-xl text-sm font-medium transition-colors"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleSave}
-                disabled={saving}
-                className="px-6 py-2.5 bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-600 hover:to-amber-600 disabled:opacity-50 text-white rounded-xl text-sm font-semibold transition-all"
-              >
-                {saving ? 'Saving...' : editingId ? 'Update' : 'Create'}
-              </button>
-            </div>
+            {/* Descriptions */}
+            <FormSection title="Details" columns={1}>
+              <FormField label="Description">
+                <TextAreaInput
+                  value={formData.description}
+                  onChange={e => setFormData(f => ({ ...f, description: e.target.value }))}
+                  className={`${inputCls} resize-none h-20`}
+                  placeholder="Describe the work required..."
+                />
+              </FormField>
+              <FormField label="Findings">
+                <TextAreaInput
+                  value={formData.findings}
+                  onChange={e => setFormData(f => ({ ...f, findings: e.target.value }))}
+                  className={`${inputCls} resize-none h-20`}
+                  placeholder="Findings from inspection..."
+                />
+              </FormField>
+              <FormField label="Actions Taken">
+                <TextAreaInput
+                  value={formData.actionsTaken}
+                  onChange={e => setFormData(f => ({ ...f, actionsTaken: e.target.value }))}
+                  className={`${inputCls} resize-none h-20`}
+                  placeholder="Actions performed..."
+                />
+              </FormField>
+              <FormField label="Notes">
+                <TextAreaInput
+                  value={formData.notes}
+                  onChange={e => setFormData(f => ({ ...f, notes: e.target.value }))}
+                  className={`${inputCls} resize-none h-16`}
+                  placeholder="Additional notes..."
+                />
+              </FormField>
+            </FormSection>
           </div>
-        </div>
+
+          {/* Modal Footer */}
+          <FormFooter secondary={<SecondaryButton onClick={() => setShowModal(false)}>Cancel</SecondaryButton>}>
+            <PrimaryButton onClick={handleSave} disabled={saving}>{saving ? 'Saving...' : editingId ? 'Update' : 'Create'}</PrimaryButton>
+          </FormFooter>
+        </FormModal>
       )}
     </div>
   );
