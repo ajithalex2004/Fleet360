@@ -71,6 +71,8 @@ export interface FieldOverride {
   hidden?: boolean;
   required?: boolean;
   defaultValue?: RequestValue;
+  /** Custom dropdown values overriding the built-in list for `select` fields. */
+  options?: string[];
 }
 export type FieldOverrides = Record<string, FieldOverride>;
 
@@ -102,6 +104,36 @@ const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 const TIME_RE = /^([01]\d|2[0-3]):[0-5]\d$/;
 const MAX_TEXT = 200;
 const MAX_TEXTAREA = 2000;
+const MAX_SELECT_OPTIONS = 50;
+const MAX_OPTION_LEN = 80;
+
+/** Validates and normalizes dropdown options: trimmed, deduplicated, 1..50 non-empty items. */
+export function cleanSelectOptions(raw: unknown): string[] | null {
+  if (!Array.isArray(raw)) return null;
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const item of raw) {
+    if (typeof item !== 'string' && typeof item !== 'number') return null;
+    const trimmed = String(item).trim();
+    if (!trimmed) continue;
+    if (trimmed.length > MAX_OPTION_LEN) return null;
+    if (seen.has(trimmed)) continue;
+    seen.add(trimmed);
+    out.push(trimmed);
+    if (out.length > MAX_SELECT_OPTIONS) return null;
+  }
+  return out.length > 0 ? out : null;
+}
+
+/** Exact ordered equality check for two option lists. */
+export function sameOptionsList(a?: readonly string[], b?: readonly string[]): boolean {
+  if (!a && !b) return true;
+  if (!a || !b || a.length !== b.length) return false;
+  for (let i = 0; i < a.length; i++) {
+    if (a[i] !== b[i]) return false;
+  }
+  return true;
+}
 
 export function allFields(form: RequestFormDef): RequestFieldDef[] {
   return form.sections.flatMap((s) => s.fields);
@@ -243,9 +275,9 @@ export function cleanCustomFormConfig(baseForm: RequestFormDef, raw: unknown): C
 
       let options: string[] | undefined;
       if (type === 'select') {
-        if (!Array.isArray(rec.options)) return null;
-        options = [...new Set(rec.options.map((o) => String(o ?? '').trim()).filter(Boolean))].slice(0, 50);
-        if (options.length === 0) return null;
+        const cleanedOpts = cleanSelectOptions(rec.options);
+        if (!cleanedOpts) return null;
+        options = cleanedOpts;
       }
 
       const defCheck = cleanDefaultValue({ type, options }, rec.defaultValue);
@@ -343,9 +375,9 @@ export function mergeCustomForm(baseForm: RequestFormDef, customConfig?: CustomF
 
 /**
  * The form a tenant's users see: custom sections/fields merged in, hidden
- * fields removed, required flags & defaultValues applied. Core fields ignore
- * hidden/required overrides (but accept defaultValue overrides). Sections left
- * empty are dropped.
+ * fields removed, required flags, custom select options & defaultValues
+ * applied. Core fields ignore hidden/required overrides (but accept options
+ * and defaultValue overrides). Sections left empty are dropped.
  */
 export function applyOverrides(
   form: RequestFormDef,
@@ -364,9 +396,26 @@ export function applyOverrides(
             const ov = o[f.key];
             if (!ov) return f;
             const nextRequired = f.core || ov.required === undefined ? f.required : ov.required;
-            const nextDefault = ov.defaultValue !== undefined ? ov.defaultValue : f.defaultValue;
+            const nextOptions = f.type === 'select' && ov.options?.length ? ov.options : f.options;
+            let nextDefault = ov.defaultValue !== undefined ? ov.defaultValue : f.defaultValue;
+            if (
+              f.type === 'select' &&
+              typeof nextDefault === 'string' &&
+              nextOptions &&
+              !nextOptions.includes(nextDefault)
+            ) {
+              nextDefault = undefined;
+            }
+            const baseField = nextDefault === undefined && f.defaultValue !== undefined
+              ? (() => {
+                  const copy = { ...f };
+                  delete copy.defaultValue;
+                  return copy;
+                })()
+              : f;
             return {
-              ...f,
+              ...baseField,
+              ...(nextOptions ? { options: nextOptions } : {}),
               ...(nextRequired !== undefined ? { required: nextRequired } : {}),
               ...(nextDefault !== undefined ? { defaultValue: nextDefault } : {}),
             };
@@ -376,7 +425,7 @@ export function applyOverrides(
   };
 }
 
-/** Keeps only valid overrides for known fields (hidden/required ignored on core fields; defaultValue allowed on all). */
+/** Keeps only valid overrides for known fields (hidden/required ignored on core fields; options/defaultValue allowed on all). */
 export function cleanOverrides(
   form: RequestFormDef,
   raw: unknown,
@@ -389,7 +438,7 @@ export function cleanOverrides(
   for (const [key, v] of Object.entries(raw as Record<string, unknown>)) {
     const f = byKey.get(key);
     if (!f || !v || typeof v !== 'object' || Array.isArray(v)) return null;
-    const { hidden, required, defaultValue } = v as Record<string, unknown>;
+    const { hidden, required, defaultValue, options } = v as Record<string, unknown>;
     if ((hidden !== undefined && typeof hidden !== 'boolean') || (required !== undefined && typeof required !== 'boolean')) {
       return null;
     }
@@ -398,8 +447,17 @@ export function cleanOverrides(
       if (hidden === true) entry.hidden = true;
       if (typeof required === 'boolean' && required !== !!f.required) entry.required = required;
     }
+    if (options !== undefined) {
+      if (f.type !== 'select') return null;
+      const cleanedOpts = cleanSelectOptions(options);
+      if (!cleanedOpts) return null;
+      if (!sameOptionsList(cleanedOpts, f.options)) {
+        entry.options = cleanedOpts;
+      }
+    }
+    const effectiveOptions = entry.options ?? f.options;
     if (defaultValue !== undefined) {
-      const defCheck = cleanDefaultValue(f, defaultValue);
+      const defCheck = cleanDefaultValue({ type: f.type, options: effectiveOptions }, defaultValue);
       if (!defCheck.ok) return null;
       if (defCheck.value !== undefined && defCheck.value !== f.defaultValue) {
         entry.defaultValue = defCheck.value;

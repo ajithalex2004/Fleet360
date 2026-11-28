@@ -252,15 +252,19 @@ export function resolveDynamicBookingSchema(
   const overrides = catalogCat.fieldOverrides ?? {};
   const customCfg = catalogCat.customFormConfig ?? {};
 
-  // 1. Apply hide/required overrides to built-in sections
+  // 1. Apply hide/required/options overrides to built-in sections
   const sections: BookingSectionDef[] = baseSchema.map((sec) => ({
     ...sec,
     fields: sec.fields
       .filter((f) => !overrides[f.key]?.hidden)
       .map((f) => {
         const ov = overrides[f.key];
-        if (!ov || ov.required === undefined) return f;
-        return { ...f, required: ov.required };
+        if (!ov) return f;
+        return {
+          ...f,
+          ...(ov.required !== undefined ? { required: ov.required } : {}),
+          ...(f.type === 'select' && ov.options?.length ? { options: ov.options } : {}),
+        };
       }),
   }));
 

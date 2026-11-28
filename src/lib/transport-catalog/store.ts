@@ -368,7 +368,7 @@ export async function updateTenantCategory(
   if (patch.fieldOverrides !== undefined) {
     overrides = cleanOverrides(def.form, patch.fieldOverrides, effectiveCustomConfig);
     if (!overrides) {
-      throw new CatalogError('fieldOverrides must map known field keys to valid { hidden?, required?, defaultValue? }.');
+      throw new CatalogError('fieldOverrides must map known field keys to valid { hidden?, required?, options?, defaultValue? }.');
     }
   }
 

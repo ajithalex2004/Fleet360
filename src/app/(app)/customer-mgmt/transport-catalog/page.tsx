@@ -30,6 +30,9 @@ import {
   Sparkles,
   FolderPlus,
   SlidersHorizontal,
+  ListPlus,
+  ChevronLeft,
+  ChevronRight,
 } from 'lucide-react';
 import { PageHeader } from '@/components/ui/page-theme';
 import {
@@ -64,6 +67,7 @@ import {
   applyOverrides,
   extractDefaultValues,
   mergeCustomForm,
+  sameOptionsList,
   slugifyFieldKey,
   slugifySectionKey,
   validateRequestValues,
@@ -370,10 +374,11 @@ function CategoryEditor({
     accent: cat.accent,
   });
 
-  // Inline section & field builder state
+  // Inline section, field, and select-options builder state
   const [addingSection, setAddingSection] = useState(false);
   const [newSecTitle, setNewSecTitle] = useState('');
   const [addingFieldInSection, setAddingFieldInSection] = useState<string | null>(null);
+  const [editingOptionsFieldKey, setEditingOptionsFieldKey] = useState<string | null>(null);
 
   const [busy, setBusy] = useState(false);
   const [saved, setSaved] = useState(false);
@@ -441,6 +446,43 @@ function CategoryEditor({
         delete next.defaultValue;
       } else {
         next.defaultValue = rawVal;
+      }
+      const out = { ...d };
+      if (Object.keys(next).length) out[field.key] = next;
+      else delete out[field.key];
+      return out;
+    });
+  };
+
+  const setSelectOptions = (field: RequestFieldDef, nextOptions: string[]) => {
+    if (nextOptions.length === 0) return;
+    setSaved(false);
+    setLocalErr(null);
+
+    if (field.custom) {
+      setDraftCustom((c) => ({
+        ...c,
+        fields: (c.fields ?? []).map((cf) => {
+          if (cf.key !== field.key) return cf;
+          const next = { ...cf, options: nextOptions };
+          if (typeof next.defaultValue === 'string' && !nextOptions.includes(next.defaultValue)) {
+            delete next.defaultValue;
+          }
+          return next;
+        }),
+      }));
+      return;
+    }
+
+    setDraftOverrides((d) => {
+      const next = { ...(d[field.key] ?? {}) };
+      if (sameOptionsList(nextOptions, field.options)) {
+        delete next.options;
+      } else {
+        next.options = nextOptions;
+      }
+      if (typeof next.defaultValue === 'string' && !nextOptions.includes(next.defaultValue)) {
+        delete next.defaultValue;
       }
       const out = { ...d };
       if (Object.keys(next).length) out[field.key] = next;
@@ -729,7 +771,7 @@ function CategoryEditor({
           {canEdit && (
             <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-dashed border-[var(--border-subtle)] bg-[var(--bg-main)]/40 px-3.5 py-2.5">
               <div className="text-xs text-[var(--text-muted)]">
-                Add custom sections, add fields inside any section, toggle visibility/required, or set default values pre-filled on both portals.
+                Add custom sections, add fields inside any section, edit dropdown options (<strong>Edit Values</strong>), toggle visibility/required, or set default values pre-filled on both portals.
               </div>
               {!addingSection ? (
                 <SecondaryButton icon={FolderPlus} onClick={() => setAddingSection(true)}>
@@ -799,111 +841,150 @@ function CategoryEditor({
                   const o = draftOverrides[f.key] ?? {};
                   const hidden = !f.core && !f.custom && !!o.hidden;
                   const required = f.core ? true : f.custom ? !!f.required : o.required ?? !!f.required;
-                  const effectiveDefault = f.custom
+                  const isSelect = f.type === 'select';
+                  const effectiveOptions = isSelect
+                    ? (f.custom ? (f.options ?? []) : (o.options ?? f.options ?? []))
+                    : undefined;
+                  const hasCustomOptions = isSelect && !f.custom && !!o.options && !sameOptionsList(o.options, f.options);
+                  const rawDefault = f.custom
                     ? f.defaultValue
                     : o.defaultValue !== undefined
                       ? o.defaultValue
                       : f.defaultValue;
+                  const effectiveDefault =
+                    isSelect && typeof rawDefault === 'string' && effectiveOptions && !effectiveOptions.includes(rawDefault)
+                      ? undefined
+                      : rawDefault;
+                  const isEditingOptions = editingOptionsFieldKey === f.key;
 
                   return (
-                    <div
-                      key={f.key}
-                      className={`py-2.5 flex flex-col lg:flex-row lg:items-center justify-between gap-2.5 ${
-                        hidden ? 'opacity-50' : ''
-                      }`}
-                    >
-                      <div className="min-w-0 flex-1">
-                        <div className="flex items-center gap-1.5 flex-wrap">
-                          <p className="text-xs font-semibold">{f.label}</p>
-                          <span className="text-[10px] font-mono text-[var(--text-muted)]">{f.key}</span>
-                          {f.custom && (
-                            <span className="px-1.5 py-0.2 rounded-full bg-cyan-500/15 border border-cyan-500/30 text-[9px] font-bold uppercase text-cyan-600 dark:text-cyan-300">
-                              Custom
-                            </span>
-                          )}
+                    <div key={f.key} className={`py-2.5 space-y-2 ${hidden ? 'opacity-50' : ''}`}>
+                      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-2.5">
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <p className="text-xs font-semibold">{f.label}</p>
+                            <span className="text-[10px] font-mono text-[var(--text-muted)]">{f.key}</span>
+                            {f.custom && (
+                              <span className="px-1.5 py-0.2 rounded-full bg-cyan-500/15 border border-cyan-500/30 text-[9px] font-bold uppercase text-cyan-600 dark:text-cyan-300">
+                                Custom
+                              </span>
+                            )}
+                            {hasCustomOptions && (
+                              <span className="px-1.5 py-0.2 rounded-full bg-emerald-500/15 border border-emerald-500/30 text-[9px] font-bold uppercase text-emerald-700 dark:text-emerald-300">
+                                Custom Values
+                              </span>
+                            )}
+                          </div>
+                          <div className="flex items-center gap-2 flex-wrap mt-0.5">
+                            <p className="text-[10px] text-[var(--text-muted)]">
+                              {f.type}
+                              {effectiveOptions ? ` · ${effectiveOptions.length} options` : ''}
+                              {f.unit ? ` · unit: ${f.unit}` : ''}
+                              {f.showIf ? ' · conditional' : ''}
+                            </p>
+                            {isSelect && canEdit && !hidden && (
+                              <button
+                                type="button"
+                                onClick={() => setEditingOptionsFieldKey(isEditingOptions ? null : f.key)}
+                                className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md border text-[10px] font-semibold transition-colors ${
+                                  isEditingOptions
+                                    ? 'border-blue-500/50 bg-blue-500/15 text-blue-700 dark:text-blue-300'
+                                    : 'border-[var(--border-subtle)] bg-[var(--bg-main)] hover:border-blue-500/40 hover:text-blue-600 dark:hover:text-blue-300 text-[var(--text-muted)]'
+                                }`}
+                              >
+                                <ListPlus className="w-3 h-3" />
+                                {isEditingOptions ? 'Close Values' : 'Edit Values'}
+                              </button>
+                            )}
+                          </div>
                         </div>
-                        <p className="text-[10px] text-[var(--text-muted)]">
-                          {f.type}
-                          {f.options ? ` · ${f.options.length} options` : ''}
-                          {f.unit ? ` · unit: ${f.unit}` : ''}
-                          {f.showIf ? ' · conditional' : ''}
-                        </p>
-                      </div>
 
-                      {/* Default Value Control (available for ALL fields including core & custom) */}
-                      <div className="flex items-center gap-1.5 min-w-[210px] max-w-[260px]">
-                        <DefaultValueInput
-                          field={f}
-                          value={effectiveDefault}
-                          disabled={!canEdit || hidden}
-                          onChange={(val) => setDefaultValue(f, val)}
-                        />
-                        {canEdit && effectiveDefault !== undefined && effectiveDefault !== '' && (
-                          <button
-                            type="button"
-                            title="Clear default value"
-                            onClick={() => setDefaultValue(f, undefined)}
-                            className="p-1 rounded hover:bg-[var(--bg-surface-hover)] text-[var(--text-muted)]"
-                          >
-                            <X className="w-3.5 h-3.5" />
-                          </button>
-                        )}
-                      </div>
-
-                      {/* Visibility / Required / Delete Controls */}
-                      {f.core ? (
-                        <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-[var(--text-muted)] min-w-[140px] justify-end">
-                          <Lock className="w-3 h-3" /> Core (required)
-                        </span>
-                      ) : f.custom ? (
-                        <div className="flex items-center gap-3 text-[11px] min-w-[140px] justify-end">
-                          <label className="inline-flex items-center gap-1.5 cursor-pointer">
-                            <input
-                              type="checkbox"
-                              checked={required}
-                              disabled={!canEdit}
-                              aria-label={`Require ${f.label}`}
-                              onChange={(e) => handleToggleCustomFieldRequired(f.key, e.target.checked)}
-                              className="rounded border-[var(--border-subtle)] text-blue-600 focus:ring-0"
-                            />
-                            Required
-                          </label>
-                          {canEdit && (
+                        {/* Default Value Control (available for ALL fields including core & custom) */}
+                        <div className="flex items-center gap-1.5 min-w-[210px] max-w-[260px]">
+                          <DefaultValueInput
+                            field={{ ...f, options: effectiveOptions }}
+                            value={effectiveDefault}
+                            disabled={!canEdit || hidden}
+                            onChange={(val) => setDefaultValue(f, val)}
+                          />
+                          {canEdit && effectiveDefault !== undefined && effectiveDefault !== '' && (
                             <button
                               type="button"
-                              title={`Remove ${f.label}`}
-                              onClick={() => handleRemoveCustomField(f.key)}
-                              className="p-1 rounded text-rose-500 hover:bg-rose-500/10"
+                              title="Clear default value"
+                              onClick={() => setDefaultValue(f, undefined)}
+                              className="p-1 rounded hover:bg-[var(--bg-surface-hover)] text-[var(--text-muted)]"
                             >
-                              <Trash2 className="w-3.5 h-3.5" />
+                              <X className="w-3.5 h-3.5" />
                             </button>
                           )}
                         </div>
-                      ) : (
-                        <div className="flex items-center gap-4 text-[11px] min-w-[140px] justify-end">
-                          <label className="inline-flex items-center gap-1.5 cursor-pointer">
-                            <input
-                              type="checkbox"
-                              checked={!hidden}
-                              disabled={!canEdit}
-                              aria-label={`Show ${f.label}`}
-                              onChange={(e) => setFlag(f.key, 'hidden', !e.target.checked, !!f.required)}
-                              className="rounded border-[var(--border-subtle)] text-blue-600 focus:ring-0"
-                            />
-                            Show
-                          </label>
-                          <label className="inline-flex items-center gap-1.5 cursor-pointer">
-                            <input
-                              type="checkbox"
-                              checked={required}
-                              disabled={!canEdit || hidden}
-                              aria-label={`Require ${f.label}`}
-                              onChange={(e) => setFlag(f.key, 'required', e.target.checked, !!f.required)}
-                              className="rounded border-[var(--border-subtle)] text-blue-600 focus:ring-0"
-                            />
-                            Required
-                          </label>
-                        </div>
+
+                        {/* Visibility / Required / Delete Controls */}
+                        {f.core ? (
+                          <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-[var(--text-muted)] min-w-[140px] justify-end">
+                            <Lock className="w-3 h-3" /> Core (required)
+                          </span>
+                        ) : f.custom ? (
+                          <div className="flex items-center gap-3 text-[11px] min-w-[140px] justify-end">
+                            <label className="inline-flex items-center gap-1.5 cursor-pointer">
+                              <input
+                                type="checkbox"
+                                checked={required}
+                                disabled={!canEdit}
+                                aria-label={`Require ${f.label}`}
+                                onChange={(e) => handleToggleCustomFieldRequired(f.key, e.target.checked)}
+                                className="rounded border-[var(--border-subtle)] text-blue-600 focus:ring-0"
+                              />
+                              Required
+                            </label>
+                            {canEdit && (
+                              <button
+                                type="button"
+                                title={`Remove ${f.label}`}
+                                onClick={() => handleRemoveCustomField(f.key)}
+                                className="p-1 rounded text-rose-500 hover:bg-rose-500/10"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            )}
+                          </div>
+                        ) : (
+                          <div className="flex items-center gap-4 text-[11px] min-w-[140px] justify-end">
+                            <label className="inline-flex items-center gap-1.5 cursor-pointer">
+                              <input
+                                type="checkbox"
+                                checked={!hidden}
+                                disabled={!canEdit}
+                                aria-label={`Show ${f.label}`}
+                                onChange={(e) => setFlag(f.key, 'hidden', !e.target.checked, !!f.required)}
+                                className="rounded border-[var(--border-subtle)] text-blue-600 focus:ring-0"
+                              />
+                              Show
+                            </label>
+                            <label className="inline-flex items-center gap-1.5 cursor-pointer">
+                              <input
+                                type="checkbox"
+                                checked={required}
+                                disabled={!canEdit || hidden}
+                                aria-label={`Require ${f.label}`}
+                                onChange={(e) => setFlag(f.key, 'required', e.target.checked, !!f.required)}
+                                className="rounded border-[var(--border-subtle)] text-blue-600 focus:ring-0"
+                              />
+                              Required
+                            </label>
+                          </div>
+                        )}
+                      </div>
+
+                      {isSelect && isEditingOptions && canEdit && !hidden && effectiveOptions && (
+                        <InlineSelectOptionsEditor
+                          fieldLabel={f.label}
+                          options={effectiveOptions}
+                          builtInOptions={f.custom ? undefined : f.options}
+                          hasCustomOptions={hasCustomOptions}
+                          onChange={(next) => setSelectOptions(f, next)}
+                          onClose={() => setEditingOptionsFieldKey(null)}
+                        />
                       )}
                     </div>
                   );
@@ -1034,6 +1115,180 @@ function DefaultValueInput({
         }
       }}
     />
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Inline Dropdown Field Values Editor (for built-in & custom select fields)
+// ─────────────────────────────────────────────────────────────────────────────
+
+function InlineSelectOptionsEditor({
+  fieldLabel,
+  options,
+  builtInOptions,
+  hasCustomOptions,
+  onChange,
+  onClose,
+}: {
+  fieldLabel: string;
+  options: string[];
+  builtInOptions?: string[];
+  hasCustomOptions: boolean;
+  onChange: (next: string[]) => void;
+  onClose: () => void;
+}) {
+  const [draftVal, setDraftVal] = useState('');
+  const [err, setErr] = useState<string | null>(null);
+
+  const addValue = () => {
+    const cleaned = draftVal.trim();
+    if (!cleaned) return;
+    if (cleaned.length > 80) {
+      setErr('Each option must be 80 characters or fewer.');
+      return;
+    }
+    if (options.some((o) => o.toLowerCase() === cleaned.toLowerCase())) {
+      setErr(`"${cleaned}" is already in the list.`);
+      return;
+    }
+    if (options.length >= 50) {
+      setErr('Maximum of 50 dropdown options reached.');
+      return;
+    }
+    setErr(null);
+    onChange([...options, cleaned]);
+    setDraftVal('');
+  };
+
+  const removeAt = (idx: number) => {
+    if (options.length <= 1) {
+      setErr('A dropdown field must keep at least 1 option.');
+      return;
+    }
+    setErr(null);
+    onChange(options.filter((_, i) => i !== idx));
+  };
+
+  const moveAt = (idx: number, dir: -1 | 1) => {
+    const target = idx + dir;
+    if (target < 0 || target >= options.length) return;
+    const next = [...options];
+    const [item] = next.splice(idx, 1);
+    next.splice(target, 0, item);
+    onChange(next);
+  };
+
+  return (
+    <div className="rounded-xl border border-blue-500/30 bg-blue-500/5 p-3 space-y-2.5">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <p className="text-[11px] font-bold text-blue-700 dark:text-blue-300 flex items-center gap-1.5">
+          <ListPlus className="w-3.5 h-3.5" />
+          Dropdown Values for {fieldLabel} ({options.length})
+        </p>
+        <div className="flex items-center gap-2">
+          {builtInOptions && hasCustomOptions && (
+            <button
+              type="button"
+              onClick={() => {
+                setErr(null);
+                onChange([...builtInOptions]);
+              }}
+              className="text-[10px] font-semibold text-[var(--text-muted)] hover:text-[var(--text-main)] underline"
+            >
+              Reset built-in values
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={onClose}
+            className="text-[10px] font-semibold px-2 py-0.5 rounded border border-[var(--border-subtle)] bg-[var(--bg-surface)] hover:bg-[var(--bg-surface-hover)]"
+          >
+            Done
+          </button>
+        </div>
+      </div>
+
+      {/* Existing Option Pills */}
+      <div className="flex flex-wrap gap-1.5">
+        {options.map((opt, idx) => (
+          <span
+            key={opt}
+            className="inline-flex items-center gap-1 pl-2 pr-1 py-1 rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-surface)] text-[11px] font-medium"
+          >
+            <span>{opt}</span>
+            {options.length > 1 && (
+              <>
+                <button
+                  type="button"
+                  disabled={idx === 0}
+                  title="Move left"
+                  aria-label={`Move ${opt} earlier`}
+                  onClick={() => moveAt(idx, -1)}
+                  className="p-0.5 rounded hover:bg-[var(--bg-surface-hover)] disabled:opacity-30 text-[var(--text-muted)]"
+                >
+                  <ChevronLeft className="w-3 h-3" />
+                </button>
+                <button
+                  type="button"
+                  disabled={idx === options.length - 1}
+                  title="Move right"
+                  aria-label={`Move ${opt} later`}
+                  onClick={() => moveAt(idx, 1)}
+                  className="p-0.5 rounded hover:bg-[var(--bg-surface-hover)] disabled:opacity-30 text-[var(--text-muted)]"
+                >
+                  <ChevronRight className="w-3 h-3" />
+                </button>
+                <button
+                  type="button"
+                  title={`Remove ${opt}`}
+                  aria-label={`Remove ${opt}`}
+                  onClick={() => removeAt(idx)}
+                  className="p-0.5 rounded hover:bg-rose-500/15 text-rose-500"
+                >
+                  <X className="w-3 h-3" />
+                </button>
+              </>
+            )}
+          </span>
+        ))}
+      </div>
+
+      {/* Add New Value Row */}
+      <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+        <TextInput
+          value={draftVal}
+          onChange={(e) => {
+            setDraftVal(e.target.value);
+            if (err) setErr(null);
+          }}
+          placeholder={`Add new value for ${fieldLabel} (e.g. Apple Pay, PO Invoice)…`}
+          aria-label={`New dropdown value for ${fieldLabel}`}
+          className="!py-1.5 !text-xs flex-1"
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') {
+              e.preventDefault();
+              addValue();
+            }
+          }}
+        />
+        <PrimaryButton
+          type="button"
+          icon={Plus}
+          disabled={!draftVal.trim()}
+          onClick={addValue}
+          className="!py-1.5 !text-xs shrink-0"
+        >
+          Add Value
+        </PrimaryButton>
+      </div>
+
+      {err && <p className="text-[11px] font-medium text-rose-600 dark:text-rose-400">{err}</p>}
+
+      <p className="text-[10px] text-[var(--text-muted)]">
+        New values appear immediately in the <strong>Default:</strong> selector above and Live Preview. Click{' '}
+        <strong>Save Form Changes</strong> below to publish to both portals.
+      </p>
+    </div>
   );
 }
 
