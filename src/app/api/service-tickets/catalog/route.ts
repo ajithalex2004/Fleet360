@@ -29,7 +29,7 @@ import { captureException } from '@/lib/sentry';
 import {
   CatalogError, PRIORITY_TIERS, STANDARD_CATALOG, listServiceCatalog,
   createCategory, updateCategory, deleteCategory, createType, updateType, deleteType,
-  installStandardCatalog,
+  setCatalogTypeEnabled, installStandardCatalog,
 } from '@/lib/service-tickets/service-catalog';
 
 export const runtime = 'nodejs';
@@ -76,7 +76,7 @@ async function handlePOST(req: NextRequest) {
   }
   const action = String(body.action ?? '');
   const id = String(body.id ?? '');
-  const needsId = ['updateCategory', 'deleteCategory', 'updateType', 'deleteType'].includes(action);
+  const needsId = ['updateCategory', 'deleteCategory', 'updateType', 'deleteType', 'toggleType'].includes(action);
   if (needsId && !UUID_RE.test(id)) {
     return NextResponse.json({ ok: false, error: 'A valid id is required.' }, { status: 400 });
   }
@@ -119,6 +119,20 @@ async function handlePOST(req: NextRequest) {
         const name = await deleteType(tenantId, id);
         audit('ServiceType', id, name, 'DELETE', `Deleted FSM service type ${name}`);
         return NextResponse.json({ ok: true });
+      }
+      case 'toggleType': {
+        if (typeof body.enabled !== 'boolean') {
+          return NextResponse.json({ ok: false, error: 'enabled (boolean) is required.' }, { status: 400 });
+        }
+        const r = await setCatalogTypeEnabled(tenantId, id, body.enabled, auth.userId);
+        audit(
+          'ServiceType',
+          id,
+          r.name,
+          'UPDATE',
+          `${r.enabled ? 'Enabled' : 'Disabled'} FSM service type ${r.name} (${r.key})`,
+        );
+        return NextResponse.json({ ok: true, ...r });
       }
       case 'installStandard': {
         const r = await installStandardCatalog(tenantId);

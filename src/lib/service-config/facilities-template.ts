@@ -19,8 +19,8 @@ import { seedRulesIfAbsent } from './rules-schema';
 import { ensureRootScope } from './scopes-schema';
 import { insertDepartmentIfAbsent } from '@/lib/service-tickets/departments';
 import {
-  DEFAULT_APPROVAL_RULES, DEFAULT_TICKETING_RULES, DEFAULT_VEHICLE_RULES,
-  type ApprovalRules, type TicketingRules, type VehicleRules, type FormFieldsRules,
+  DEFAULT_APPROVAL_RULES, DEFAULT_SLA_RULES, DEFAULT_TICKETING_RULES, DEFAULT_VEHICLE_RULES,
+  type ApprovalRules, type SlaRules, type TicketingRules, type VehicleRules, type FormFieldsRules,
 } from '@/types/service-rules';
 import type { FormFieldDef, TicketPriority } from '@/types/service-tickets';
 import type { ServiceTone } from '@/types/service-config';
@@ -162,6 +162,27 @@ export function facilitiesTypeKeys(): string[] {
   return FACILITIES_CATALOGUE.flatMap((c) => c.types.map((t) => t.key));
 }
 
+export function facilitiesCategoryKeys(): string[] {
+  return FACILITIES_CATALOGUE.map((c) => c.key);
+}
+
+/**
+ * Derives default `sla` rules (including `onSiteArrivalHours`) for an FM_*
+ * Facilities type so it carries full catalogue SLA timers and can also be
+ * requested in the FSM Customer Portal without manual SLA setup.
+ */
+export function facilitiesDefaultSlaRule(defaultPriority: TicketPriority, matrix: Matrix): SlaRules {
+  const resolutionHours = matrix[defaultPriority] ?? matrix.Medium;
+  const onSiteHours = Math.min(24, Math.max(0.5, Math.round((resolutionHours / 2) * 10) / 10));
+  const responseMinutes = Math.min(240, Math.max(15, Math.round(resolutionHours * 15)));
+  return {
+    ...DEFAULT_SLA_RULES,
+    responseSlaMinutes: responseMinutes,
+    onSiteArrivalHours: onSiteHours,
+    resolutionSlaHours: resolutionHours,
+  };
+}
+
 /** How many of the template's types the tenant already has (any state). */
 export async function facilitiesInstallStatus(tenantId: string): Promise<{ installed: number; total: number }> {
   const keys = facilitiesTypeKeys();
@@ -231,11 +252,13 @@ export async function installFacilitiesTemplate(tenantId: string): Promise<{ typ
       };
       const vehicle: VehicleRules = { ...DEFAULT_VEHICLE_RULES, vehicleRequired: false };
       const formFields: FormFieldsRules = { fields: [...FM_LOCATION_FIELDS, ...(t.fields ?? [])] };
+      const slaRule = facilitiesDefaultSlaRule(t.defaultPriority, t.sla);
 
       await seedRulesIfAbsent(type.id, 'approval', approval, rootScopeId);
       await seedRulesIfAbsent(type.id, 'ticketing', ticketing, rootScopeId);
       await seedRulesIfAbsent(type.id, 'vehicle', vehicle, rootScopeId);
       await seedRulesIfAbsent(type.id, 'formFields', formFields, rootScopeId);
+      await seedRulesIfAbsent(type.id, 'sla', slaRule, rootScopeId);
     }
   }
 

@@ -7,13 +7,20 @@
  */
 
 import { useCallback, useEffect, useState } from 'react';
-import { Building2, CheckCircle2, Loader2, Plus, Users, Eye, EyeOff, Save, X } from 'lucide-react';
+import Link from 'next/link';
+import { Building2, CheckCircle2, Loader2, Plus, Users, Eye, EyeOff, Save, X, ArrowDown, ArrowUpRight } from 'lucide-react';
 
 const card = 'bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-2xl p-4';
 const input = 'w-full bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-lg px-3 py-2 text-sm text-[var(--text-main)] focus:outline-none focus:ring-2 focus:ring-violet-500';
 const btn = 'inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-semibold disabled:opacity-50';
 
-export function FacilitiesTemplateCard({ onInstalled }: { onInstalled: () => void }) {
+export function FacilitiesTemplateCard({
+  onInstalled,
+  onJumpToFm,
+}: {
+  onInstalled: () => void;
+  onJumpToFm?: () => void;
+}) {
   const [status, setStatus] = useState<{ installed: number; total: number } | null>(null);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
@@ -61,6 +68,29 @@ export function FacilitiesTemplateCard({ onInstalled }: { onInstalled: () => voi
             </p>
           )}
           {msg && <p role="status" className={`text-xs mt-2 ${msg.ok ? 'text-emerald-600 dark:text-emerald-300' : 'text-rose-600 dark:text-rose-300'}`}>{msg.text}</p>}
+          <div className="flex flex-wrap items-center gap-2 mt-3 pt-2.5 border-t border-[var(--border-subtle)]">
+            {status && status.installed > 0 && onJumpToFm && (
+              <button
+                type="button"
+                onClick={onJumpToFm}
+                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-amber-500/15 hover:bg-amber-500/25 border border-amber-500/40 text-amber-800 dark:text-amber-200 text-[11px] font-semibold transition-colors"
+              >
+                <ArrowDown className="w-3 h-3" /> Show in Service Tree
+              </button>
+            )}
+            <Link
+              href="/service-tickets/catalog"
+              className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-violet-500/15 hover:bg-violet-500/25 border border-violet-500/40 text-violet-800 dark:text-violet-200 text-[11px] font-semibold transition-colors"
+            >
+              Service Catalog &amp; SLA (33 FSM types) <ArrowUpRight className="w-3 h-3" />
+            </Link>
+            <Link
+              href="/customer-mgmt/portal-access"
+              className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-[var(--bg-surface-hover)] hover:bg-[var(--bg-main)] border border-[var(--border-subtle)] text-[var(--text-main)] text-[11px] font-semibold transition-colors"
+            >
+              Customer Portal Access <ArrowUpRight className="w-3 h-3" />
+            </Link>
+          </div>
         </div>
         <button type="button" onClick={install} disabled={busy || !!complete}
           className={`${btn} bg-amber-500/15 hover:bg-amber-500/25 border border-amber-500/40 text-amber-700 dark:text-amber-200 shrink-0`}>

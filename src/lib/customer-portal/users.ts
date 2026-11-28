@@ -171,11 +171,35 @@ export async function portalsForCustomer(tenantId: string, customerId: string): 
   }).catch(() => [] as CustomerPortal[]);
 }
 
+/**
+ * Per-customer FSM request type whitelist (`customer_portal_access.categories`
+ * for `portal = 'FSM'`). Empty array means unrestricted (all enabled FSM types).
+ */
+export async function customerAllowedFsmTypes(
+  tenantId: string,
+  customerId: string,
+  tx?: TxClient,
+): Promise<string[]> {
+  const run = async (client: TxClient) => {
+    const [row] = await client.$queryRawUnsafe<Array<{ categories: string[] | null }>>(
+      `SELECT categories FROM customer_portal_access
+        WHERE tenant_id = $1 AND customer_id = $2 AND portal = 'FSM'`,
+      tenantId,
+      customerId,
+    );
+    return (row?.categories ?? []).filter((k): k is string => typeof k === 'string' && k.length > 0);
+  };
+  return (tx ? run(tx) : withTenantRls(prisma, tenantId, run)).catch(() => [] as string[]);
+}
+
 // ── Staff onboarding ───────────────────────────────────────────────────────
 
 export interface CustomerPortalSummary {
   customerId: string; code: string | null; name: string; status: string | null;
-  portals: CustomerPortal[]; transportCategories: TransportCategoryCode[]; activeUsers: number; invitedUsers: number;
+  portals: CustomerPortal[]; transportCategories: TransportCategoryCode[];
+  /** Selected FSM request type keys for this customer; empty = all enabled FSM types. */
+  fsmRequestTypes: string[];
+  activeUsers: number; invitedUsers: number;
   /** Linked Rental customer (Rent-a-Car), shown by name. */
   rentalCustomer: { id: string; name: string } | null;
 }
@@ -184,7 +208,8 @@ export async function listCustomerPortalSummaries(tenantId: string): Promise<Cus
   const rows = await withTenantRls(prisma, tenantId, (tx) =>
     tx.$queryRawUnsafe<Array<{
       id: string; customer_code: string | null; name_en: string; status: string | null;
-      portals: string[] | null; transport_categories: string[] | null; active_users: number; invited_users: number;
+      portals: string[] | null; transport_categories: string[] | null; fsm_request_types: string[] | null;
+      active_users: number; invited_users: number;
       rental_customer_id: string | null; rental_customer_name: string | null;
     }>>(
       `SELECT c.id, c.customer_code, c.name_en, c.status,
@@ -192,6 +217,8 @@ export async function listCustomerPortalSummaries(tenantId: string): Promise<Cus
                 WHERE a.tenant_id = c.tenant_id AND a.customer_id = c.id) AS portals,
               (SELECT a.categories FROM customer_portal_access a
                 WHERE a.tenant_id = c.tenant_id AND a.customer_id = c.id AND a.portal = 'TRANSPORT') AS transport_categories,
+              (SELECT a.categories FROM customer_portal_access a
+                WHERE a.tenant_id = c.tenant_id AND a.customer_id = c.id AND a.portal = 'FSM') AS fsm_request_types,
               (SELECT COUNT(*)::int FROM customer_portal_users u
                 WHERE u.tenant_id = c.tenant_id AND u.customer_id = c.id AND u.deleted_at IS NULL
                   AND u.is_active AND u.password_hash IS NOT NULL
@@ -214,18 +241,21 @@ export async function listCustomerPortalSummaries(tenantId: string): Promise<Cus
     customerId: r.id, code: r.customer_code, name: r.name_en, status: r.status,
     portals: (r.portals ?? []).filter(isCustomerPortal),
     transportCategories: (r.transport_categories ?? []) as TransportCategoryCode[],
+    fsmRequestTypes: (r.fsm_request_types ?? []).filter(Boolean),
     activeUsers: Number(r.active_users), invitedUsers: Number(r.invited_users),
     rentalCustomer: r.rental_customer_id ? { id: r.rental_customer_id, name: r.rental_customer_name ?? r.rental_customer_id } : null,
   }));
 }
 
 /**
- * Turns a portal on or off for a customer. For TRANSPORT, `categories`
- * (when given) replaces the customer's Transport categories.
+ * Turns a portal on or off for a customer.
+ *   - TRANSPORT: `categories` (when given) replaces the customer's Transport categories.
+ *   - FSM: `categories` (when given) replaces the customer's FSM request type whitelist
+ *          (`[]` = unrestricted / all enabled FSM types).
  */
 export async function setCustomerPortalAccess(
   tenantId: string, customerId: string, portal: CustomerPortal, enabled: boolean, by: string,
-  categories?: TransportCategoryCode[],
+  categories?: string[],
 ): Promise<void> {
   await withTenantRls(prisma, tenantId, async (tx) => {
     const [c] = await tx.$queryRawUnsafe<Array<{ id: string }>>(
@@ -262,7 +292,7 @@ export async function setCustomerPortalAccess(
       }
     }
     if (enabled) {
-      const cats = portal === 'TRANSPORT' ? (categories ?? null) : [];
+      const cats = categories !== undefined ? categories : null;
       await tx.$executeRawUnsafe(
         `INSERT INTO customer_portal_access (tenant_id, customer_id, portal, enabled_by, categories)
          VALUES ($1, $2, $3, $4, COALESCE($5::text[], '{}'))

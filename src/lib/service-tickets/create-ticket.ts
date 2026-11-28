@@ -24,6 +24,8 @@ import { TICKET_TYPE_KEY_RE, isTicketPriority, type TicketType, type TicketPrior
 import { listEnabledTicketTypes } from '@/lib/service-tickets/catalogue';
 import { loadServiceConfig } from '@/lib/service-config/load';
 import { resolveTicketInitialStatus, resolveTicketSlaMatrixBatch } from '@/lib/service-config/resolvers';
+import { customerAllowedFsmTypes } from '@/lib/customer-portal/users';
+import { isFsmTypeAllowedForCustomer } from '@/lib/customer-portal/fsm-types';
 import { logAudit } from '@/lib/audit';
 import { captureException } from '@/lib/sentry';
 import { FSM_REQUEST_COLS, TICKET_BASE_COLS, ticketRowToApi, type TicketRow } from './ticket-row';
@@ -99,6 +101,12 @@ export async function createServiceTicket(
     : null;
   if (portal && (!catalogSla || cfg.rules.vehicle.vehicleRequired)) {
     return bad(`${longLabel} cannot be requested from the Customer Portal.`, 403);
+  }
+  if (portal) {
+    const allowedFsmTypes = await customerAllowedFsmTypes(tenantId, portal.customerId, tx);
+    if (!isFsmTypeAllowedForCustomer(ticketType, allowedFsmTypes)) {
+      return bad(`${longLabel} is not enabled for your account. Ask your administrator to grant access.`, 403);
+    }
   }
 
   const priority: TicketPriority = catalogSla

@@ -15,7 +15,7 @@
  * that other modules will read in Phase 2C.
  */
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Settings, Plus, Search, ChevronDown, ChevronRight, Trash2, Save, Folder,
   AlertCircle, Layers, Workflow, Bell, ShieldCheck, DollarSign, Truck,
@@ -88,6 +88,11 @@ export default function ServiceConfigPage() {
   const [scopes, setScopes]                   = useState<ServiceScope[]>([]);
   const [activeScopeId, setActiveScopeId]     = useState<string | null>(null);
   const [showNewScope, setShowNewScope]       = useState(false);
+  const categoryRefs                          = useRef<Record<string, HTMLDivElement | null>>({});
+  const knownCategoryIdsRef                   = useRef<Set<string>>(new Set());
+  const pendingScrollCatIdRef                 = useRef<string | null>(null);
+
+  const FM_CATEGORY_PREFIX = 'FM_';
 
   const scopeLookup = useMemo(() => {
     const out: Record<string, { name: string; isRoot: boolean }> = {};
@@ -105,19 +110,44 @@ export default function ServiceConfigPage() {
     setActiveScopeId(prev => prev ?? list.find(s => s.isRoot)?.id ?? null);
   }, []);
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (opts?: { focusNewOrFm?: boolean }) => {
     setLoading(true); setError(null);
     try {
       const res = await fetch('/api/admin/service-config/categories');
       const data = await res.json();
       if (!res.ok) throw new Error(data?.error ?? 'Failed to load');
       const cats: ServiceCategoryWithTypes[] = data.categories ?? [];
+      const prevIds = knownCategoryIdsRef.current;
+      const newlyAdded = cats.filter(c => !prevIds.has(c.id));
+      knownCategoryIdsRef.current = new Set(cats.map(c => c.id));
       setCategories(cats);
       setMappings(data.mappings ?? []);
-      // Expand all on first load so the tree feels alive.
-      setExpanded(prev => prev.size === 0 ? new Set(cats.map(c => c.id)) : prev);
-      // Auto-select first type if nothing chosen yet.
-      if (!selectedTypeId) {
+
+      // Expand all on first load; on subsequent loads auto-expand any newly added categories.
+      setExpanded(prev => {
+        if (prev.size === 0) return new Set(cats.map(c => c.id));
+        if (newlyAdded.length === 0 && !opts?.focusNewOrFm) return prev;
+        const next = new Set(prev);
+        for (const c of newlyAdded) next.add(c.id);
+        if (opts?.focusNewOrFm) {
+          for (const c of cats) {
+            if (c.key.startsWith(FM_CATEGORY_PREFIX) || c.key.startsWith('FSM_')) next.add(c.id);
+          }
+        }
+        return next;
+      });
+
+      if (opts?.focusNewOrFm) {
+        const focusTarget =
+          newlyAdded.find(c => c.types.length > 0) ??
+          cats.find(c => (c.key.startsWith(FM_CATEGORY_PREFIX) || c.key.startsWith('FSM_')) && c.types.length > 0);
+        if (focusTarget) {
+          setSearch('');
+          if (focusTarget.types[0]) setSelectedTypeId(focusTarget.types[0].id);
+          pendingScrollCatIdRef.current = focusTarget.id;
+        }
+      } else if (!selectedTypeId) {
+        // Auto-select first type if nothing chosen yet.
         const firstType = cats.flatMap(c => c.types)[0];
         if (firstType) setSelectedTypeId(firstType.id);
       }
@@ -130,6 +160,36 @@ export default function ServiceConfigPage() {
   }, [selectedTypeId, loadScopes]);
 
   useEffect(() => { void load(); }, [load]);
+
+  // Smoothly scroll newly focused / installed category into view after tree renders.
+  useEffect(() => {
+    const targetId = pendingScrollCatIdRef.current;
+    if (!targetId) return;
+    const el = categoryRefs.current[targetId];
+    if (el) {
+      pendingScrollCatIdRef.current = null;
+      requestAnimationFrame(() => el.scrollIntoView({ behavior: 'smooth', block: 'start' }));
+    }
+  }, [categories, expanded]);
+
+  const jumpToFieldServiceCategories = useCallback(() => {
+    setSearch('');
+    const targets = categories.filter(c => c.key.startsWith(FM_CATEGORY_PREFIX) || c.key.startsWith('FSM_'));
+    if (targets.length === 0) return;
+    setExpanded(prev => {
+      const next = new Set(prev);
+      for (const c of targets) next.add(c.id);
+      return next;
+    });
+    const first = targets.find(c => c.types.length > 0) ?? targets[0];
+    if (first.types[0]) setSelectedTypeId(first.types[0].id);
+    pendingScrollCatIdRef.current = first.id;
+    const el = categoryRefs.current[first.id];
+    if (el) {
+      pendingScrollCatIdRef.current = null;
+      el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+  }, [categories]);
 
   // ── Derived ─────────────────────────────────────────────────────────────
   const selectedType = useMemo(() => {
@@ -185,7 +245,10 @@ export default function ServiceConfigPage() {
       )}
 
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
-        <FacilitiesTemplateCard onInstalled={() => { void load(); setDeptRefresh(n => n + 1); }} />
+        <FacilitiesTemplateCard
+          onInstalled={() => { void load({ focusNewOrFm: true }); setDeptRefresh(n => n + 1); }}
+          onJumpToFm={jumpToFieldServiceCategories}
+        />
         <DepartmentsPanel refreshKey={deptRefresh} />
       </div>
 
@@ -198,13 +261,27 @@ export default function ServiceConfigPage() {
               placeholder="Search services…"
               className="w-full bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-lg pl-9 pr-3 py-2 text-sm text-[var(--text-main)] focus:outline-none focus:ring-2 focus:ring-violet-500" />
           </div>
-          <button onClick={() => setShowNewCat(true)}
-            className="w-full inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg bg-violet-600/20 hover:bg-violet-600/30 border border-violet-500/40 text-violet-200 text-xs font-semibold">
-            <Plus className="w-3.5 h-3.5" /> Add category
-          </button>
+          <div className="flex items-center gap-2">
+            <button onClick={() => setShowNewCat(true)}
+              className="flex-1 inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg bg-violet-600/20 hover:bg-violet-600/30 border border-violet-500/40 text-violet-700 dark:text-violet-200 text-xs font-semibold">
+              <Plus className="w-3.5 h-3.5" /> Add category
+            </button>
+            <button
+              type="button"
+              onClick={() =>
+                setExpanded(prev =>
+                  prev.size >= categories.length ? new Set() : new Set(categories.map(c => c.id)),
+                )
+              }
+              className="px-2.5 py-2 rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-main)] hover:bg-[var(--bg-surface-hover)] text-[11px] font-semibold text-[var(--text-muted)] shrink-0"
+              title={expanded.size >= categories.length ? 'Collapse all categories' : 'Expand all categories'}
+            >
+              {expanded.size >= categories.length ? 'Collapse all' : 'Expand all'}
+            </button>
+          </div>
 
           {showNewCat && (
-            <NewCategoryRow onCancel={() => setShowNewCat(false)} onCreated={() => { setShowNewCat(false); void load(); }} />
+            <NewCategoryRow onCancel={() => setShowNewCat(false)} onCreated={() => { setShowNewCat(false); void load({ focusNewOrFm: true }); }} />
           )}
 
           {loading ? (
@@ -216,7 +293,7 @@ export default function ServiceConfigPage() {
           ) : (
             <div className="space-y-1 pt-1 max-h-[70vh] overflow-y-auto">
               {filteredCategories.map(cat => (
-                <div key={cat.id} className="space-y-0.5">
+                <div key={cat.id} ref={el => { categoryRefs.current[cat.id] = el; }} className="space-y-0.5">
                   <button onClick={() => toggle(cat.id)}
                     className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-lg text-left text-sm font-semibold ${TONE_FG[cat.tone]} hover:bg-[var(--bg-surface-hover)]`}>
                     {expanded.has(cat.id) ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronRight className="w-3.5 h-3.5" />}
