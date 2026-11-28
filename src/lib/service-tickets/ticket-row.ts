@@ -36,6 +36,9 @@ export interface TicketRow {
   request_channel?: string | null;
   service_needed_at?: string | null;
   entitlement_type?: string | null;
+  primary_technician_id?: string | null;
+  assigned_team_id?: string | null;
+  territory_id?: string | null;
 }
 
 export const TICKET_BASE_COLS = `id::text, tenant_id, ticket_type, readable_id, requestor_id, requestor_name,
@@ -44,12 +47,15 @@ export const TICKET_BASE_COLS = `id::text, tenant_id, ticket_type, readable_id, 
   created_at::text, updated_at::text`;
 
 export const FSM_REQUEST_COLS = `
-  to_jsonb(service_tickets) ->> 'customer_id'       AS customer_id,
-  to_jsonb(service_tickets) ->> 'customer_site_id'  AS customer_site_id,
-  to_jsonb(service_tickets) ->> 'asset_id'          AS asset_id,
-  to_jsonb(service_tickets) ->> 'request_channel'   AS request_channel,
-  to_jsonb(service_tickets) ->> 'service_needed_at' AS service_needed_at,
-  to_jsonb(service_tickets) ->> 'entitlement_type'  AS entitlement_type`;
+  to_jsonb(service_tickets) ->> 'customer_id'           AS customer_id,
+  to_jsonb(service_tickets) ->> 'customer_site_id'      AS customer_site_id,
+  to_jsonb(service_tickets) ->> 'asset_id'              AS asset_id,
+  to_jsonb(service_tickets) ->> 'request_channel'       AS request_channel,
+  to_jsonb(service_tickets) ->> 'service_needed_at'     AS service_needed_at,
+  to_jsonb(service_tickets) ->> 'entitlement_type'      AS entitlement_type,
+  to_jsonb(service_tickets) ->> 'primary_technician_id' AS primary_technician_id,
+  to_jsonb(service_tickets) ->> 'assigned_team_id'      AS assigned_team_id,
+  to_jsonb(service_tickets) ->> 'territory_id'          AS territory_id`;
 
 export function ticketRowToApi(r: TicketRow, matrix?: SlaMatrix) {
   const priority = r.priority as TicketPriority;
@@ -87,6 +93,9 @@ export function ticketRowToApi(r: TicketRow, matrix?: SlaMatrix) {
     requestChannel: r.request_channel ?? null,
     serviceNeededAt: r.service_needed_at ?? null,
     entitlementType: r.entitlement_type ?? null,
+    primaryTechnicianId: r.primary_technician_id ?? null,
+    assignedTeamId: r.assigned_team_id ?? null,
+    territoryId: r.territory_id ?? null,
   };
 }
 export type ApiTicket = ReturnType<typeof ticketRowToApi>;

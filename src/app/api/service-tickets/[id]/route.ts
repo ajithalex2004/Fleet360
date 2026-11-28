@@ -26,6 +26,8 @@ import {
   dispatchTicketAutomationNotifications,
   resolveAutomationRules,
 } from '@/lib/service-tickets/automation-engine';
+import { checkFsmPermission } from '@/lib/service-tickets/workforce';
+import { getUserFsmScopes } from '@/lib/service-tickets/workforce-db';
 import { logAudit } from '@/lib/audit';
 import { bestEffortInTx } from '@/lib/db/best-effort';
 import { isCriticalPriority, ungroundIfClear } from '@/lib/fleet/grounding-blocks';
@@ -43,6 +45,7 @@ interface Row {
   title: string; description: string | null;
   priority: string; status: string; due_date: string | null;
   assigned_to: string | null; maintenance_request_id: string | null;
+  primary_technician_id?: string | null; assigned_team_id?: string | null; territory_id?: string | null;
   history: unknown; attachments: unknown; comments: unknown; custom_fields: unknown;
   created_at: string; updated_at: string;
 }
@@ -59,6 +62,9 @@ function rowToApi(r: Row, matrix?: SlaMatrix) {
     title: r.title, description: r.description, priority: r.priority, status: r.status,
     dueDate: r.due_date, assignedTo: r.assigned_to,
     maintenanceRequestId: r.maintenance_request_id,
+    primaryTechnicianId: r.primary_technician_id ?? null,
+    assignedTeamId: r.assigned_team_id ?? null,
+    territoryId: r.territory_id ?? null,
     assignedDepartment,
     source,
     history:     Array.isArray(r.history)     ? r.history     : [],
@@ -78,7 +84,11 @@ async function matrixFor(tenantId: string, ticketType: string): Promise<SlaMatri
 
 const SELECT_COLS = `id::text, tenant_id, ticket_type, readable_id, requestor_id, requestor_name,
   vehicle_id, related_driver_id, title, description, priority, status, due_date::text,
-  assigned_to, maintenance_request_id, history, attachments, comments, custom_fields,
+  assigned_to, maintenance_request_id,
+  to_jsonb(service_tickets) ->> 'primary_technician_id' AS primary_technician_id,
+  to_jsonb(service_tickets) ->> 'assigned_team_id' AS assigned_team_id,
+  to_jsonb(service_tickets) ->> 'territory_id' AS territory_id,
+  history, attachments, comments, custom_fields,
   created_at::text, updated_at::text`;
 
 async function loadTicket(tenantId: string, id: string): Promise<Row | null> {
@@ -209,14 +219,102 @@ export async function PATCH(req: NextRequest, { params }: RouteParams) {
         }
       }
 
+      // Validate & link optional FSM technician / team / territory references.
+      const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+      let resolvedAssignedTo: string | null | undefined =
+        typeof body.assignedTo === 'string'
+          ? body.assignedTo
+          : body.assignedTo === null
+            ? null
+            : undefined;
+      let validatedTechId: string | null | undefined = undefined;
+      let validatedTeamId: string | null | undefined = undefined;
+      let validatedTerritoryId: string | null | undefined = undefined;
+
+      if (body.primaryTechnicianId !== undefined) {
+        if (body.primaryTechnicianId === null || body.primaryTechnicianId === '') {
+          validatedTechId = null;
+        } else if (typeof body.primaryTechnicianId === 'string' && UUID_RE.test(body.primaryTechnicianId)) {
+          const [techRow] = await tx.$queryRawUnsafe<Array<{ id: string; email: string }>>(
+            `SELECT id::text, email FROM fsm_technicians WHERE id = $1::uuid AND tenant_id = $2 AND deleted_at IS NULL`,
+            body.primaryTechnicianId, tenantId,
+          );
+          if (!techRow) {
+            return NextResponse.json({ ok: false, error: 'Technician not found for this tenant.' }, { status: 404 });
+          }
+          validatedTechId = techRow.id;
+          if (!resolvedAssignedTo) resolvedAssignedTo = techRow.email;
+        } else {
+          return NextResponse.json({ ok: false, error: 'Invalid primaryTechnicianId.' }, { status: 400 });
+        }
+      }
+
+      if (body.assignedTeamId !== undefined) {
+        if (body.assignedTeamId === null || body.assignedTeamId === '') {
+          validatedTeamId = null;
+        } else if (typeof body.assignedTeamId === 'string' && UUID_RE.test(body.assignedTeamId)) {
+          const [teamRow] = await tx.$queryRawUnsafe<Array<{ id: string; territory_id: string | null; lead_email: string | null }>>(
+            `SELECT tm.id::text, tm.territory_id::text, lt.email AS lead_email
+               FROM fsm_teams tm
+               LEFT JOIN fsm_technicians lt ON lt.id = tm.lead_technician_id AND lt.deleted_at IS NULL
+              WHERE tm.id = $1::uuid AND tm.tenant_id = $2 AND tm.deleted_at IS NULL`,
+            body.assignedTeamId, tenantId,
+          );
+          if (!teamRow) {
+            return NextResponse.json({ ok: false, error: 'Team not found for this tenant.' }, { status: 404 });
+          }
+          validatedTeamId = teamRow.id;
+          if (!resolvedAssignedTo && teamRow.lead_email) resolvedAssignedTo = teamRow.lead_email;
+          if (body.territoryId === undefined && teamRow.territory_id) validatedTerritoryId = teamRow.territory_id;
+        } else {
+          return NextResponse.json({ ok: false, error: 'Invalid assignedTeamId.' }, { status: 400 });
+        }
+      }
+
+      if (body.territoryId !== undefined) {
+        if (body.territoryId === null || body.territoryId === '') {
+          validatedTerritoryId = null;
+        } else if (typeof body.territoryId === 'string' && UUID_RE.test(body.territoryId)) {
+          const [terrRow] = await tx.$queryRawUnsafe<Array<{ id: string }>>(
+            `SELECT id::text FROM fsm_territories WHERE id = $1::uuid AND tenant_id = $2 AND deleted_at IS NULL`,
+            body.territoryId, tenantId,
+          );
+          if (!terrRow) {
+            return NextResponse.json({ ok: false, error: 'Territory not found for this tenant.' }, { status: 404 });
+          }
+          validatedTerritoryId = terrRow.id;
+        } else {
+          return NextResponse.json({ ok: false, error: 'Invalid territoryId.' }, { status: 400 });
+        }
+      }
+
+      // Enforce granular FSM RBAC when assigning a technician/team or escalating
+      if (validatedTechId !== undefined || validatedTeamId !== undefined) {
+        const platformRole = req.headers.get('x-user-role') || '';
+        const fsmScopes =
+          (await bestEffortInTx(tx, 'service-tickets.fsm-scopes', () =>
+            getUserFsmScopes(tx, tenantId, userId ?? ''),
+          )) ?? [];
+        const perm = checkFsmPermission({
+          platformRole,
+          fsmScopes,
+          action: 'dispatch:assign',
+          targetTerritoryId: validatedTerritoryId ?? null,
+          targetTeamId: validatedTeamId ?? null,
+        });
+        if (!perm.allowed) {
+          return NextResponse.json({ ok: false, error: perm.reason ?? 'Forbidden' }, { status: 403 });
+        }
+      }
+
       // Load service config upfront so Automation rules (autoStatusUpdate & notifications)
       // apply cleanly without an extra round-trip.
       const cfg = await loadServiceConfig(tenantId, existing.ticket_type as TicketType);
       const automationRules = resolveAutomationRules(cfg?.rules.automation);
       const nextAssignedTo =
-        typeof body.assignedTo === 'string'
-          ? (body.assignedTo.trim() || null)
-          : body.assignedTo === null
+        typeof resolvedAssignedTo === 'string'
+          ? (resolvedAssignedTo.trim() || null)
+          : resolvedAssignedTo === null
             ? null
             : existing.assigned_to;
       const effectiveStatus = computeAutoStatusOnUpdate({
@@ -248,7 +346,10 @@ export async function PATCH(req: NextRequest, { params }: RouteParams) {
       setIf('title',                  body.title);
       setIf('description',            body.description);
       setIf('due_date',               body.dueDate, '::date');
-      setIf('assigned_to',            body.assignedTo);
+      setIf('assigned_to',            resolvedAssignedTo);
+      setIf('primary_technician_id',  validatedTechId, '::uuid');
+      setIf('assigned_team_id',       validatedTeamId, '::uuid');
+      setIf('territory_id',           validatedTerritoryId, '::uuid');
       setIf('vehicle_id',             body.vehicleId);
       setIf('related_driver_id',      body.relatedDriverId);
       setIf('maintenance_request_id', body.maintenanceRequestId);

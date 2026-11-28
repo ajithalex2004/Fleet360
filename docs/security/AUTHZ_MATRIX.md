@@ -97,7 +97,7 @@ Do not edit by hand: run `UPDATE_AUTHZ_MATRIX=1 npx vitest run tests/unit/authz-
 | `search` | 1 | self | self |
 | `service` | 0 | module `maintenance` | module `maintenance` |
 | `service-requests` | 2 | module `service-tickets` | module `service-tickets` |
-| `service-tickets` | 20 | module `service-tickets` | module `service-tickets` |
+| `service-tickets` | 27 | module `service-tickets` | module `service-tickets` |
 | `service-tickets/catalog` | 1 | module `service-tickets` | tenant-admin |
 | `setup` | 1 | external | external |
 | `shipper-portal` | 9 | external | external |
