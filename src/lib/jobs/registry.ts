@@ -66,6 +66,7 @@ import { runOutboxPublisher }        from '@/lib/jobs/outbox-publisher';
 import { runBusOpsGenerateScheduleTemplates } from '@/lib/jobs/bus-ops-generate-schedule-templates';
 import { runAlertTripOverdue }       from '@/lib/jobs/alert-trip-overdue';
 import { runWorkflowEscalation }     from '@/lib/jobs/workflow-escalation';
+import { runServiceTicketAutomationSweep } from '@/lib/jobs/service-tickets-automation-sweep';
 import {
   runFuelSweepBill,
   runTrafficFinesSweepBill,
@@ -218,6 +219,13 @@ export const JOB_REGISTRY: JobDef[] = [
     handler:        runServiceTicketSlaSweep,
     maxDurationSec: 120,
     allowedRoles:   ['SUPER_ADMIN', 'TENANT_ADMIN', 'OPERATIONS'],
+  },
+  {
+    name:           'service-tickets-automation-sweep',
+    description:    'Executes FSM Automation rules: auto-closes quiet Resolved tickets and dispatches periodic assignee reminders',
+    handler:        runServiceTicketAutomationSweep,
+    maxDurationSec: 120,
+    allowedRoles:   ['SUPER_ADMIN', 'TENANT_ADMIN', 'OPERATIONS', 'OPERATIONS_MANAGER', 'FLEET_MANAGER'],
   },
   {
     name:           'document-lifecycle-sweep',

@@ -21,6 +21,11 @@ import {
   type TicketPriority,
 } from '@/types/service-tickets';
 import { listDepartments } from '@/lib/service-tickets/departments';
+import { loadServiceConfig } from '@/lib/service-config/load';
+import {
+  dispatchTicketAutomationNotifications,
+  resolveAutomationRules,
+} from '@/lib/service-tickets/automation-engine';
 import { logAudit } from '@/lib/audit';
 import { captureException } from '@/lib/sentry';
 
@@ -145,7 +150,7 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
     }
 
     let maintenanceRequestId = existing.maintenance_request_id;
-    let createdMr: any = null;
+    let createdMr: { id: string; workOrderNo?: string | null } | null = null;
 
     // WORKSHOP_MAINTENANCE: Auto-provision linked MaintenanceRequest if not already
     // created. Skipped while the ticket is still Awaiting Approval — a real work
@@ -196,7 +201,7 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
       ? (existing.custom_fields as Record<string, unknown>)
       : {};
 
-    const updatedCustom = {
+    const updatedCustom: Record<string, unknown> = {
       ...existingCustom,
       assignedDepartment: department,
       forwardedAt: new Date().toISOString(),
@@ -253,6 +258,30 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
         action: 'FORWARD',
         details: `Forwarded ${updated.readable_id || updated.id} to ${deptDef.label}${nextAssignee ? ` (${nextAssignee})` : ''}`,
       });
+
+      const cfg = await loadServiceConfig(tenantId, updated.ticket_type).catch(() => null);
+      const automationRules = resolveAutomationRules(cfg?.rules.automation);
+      if (
+        automationRules.emailNotifications ||
+        automationRules.whatsappNotifications ||
+        automationRules.smsNotifications
+      ) {
+        void dispatchTicketAutomationNotifications({
+          event: 'FORWARDED',
+          rules: automationRules,
+          notificationEngineEnabled: cfg?.mapping?.notificationEngineEnabled,
+          readableId: updated.readable_id ?? updated.id.slice(0, 8),
+          title: updated.title,
+          status: updated.status,
+          priority: updated.priority,
+          serviceTypeName: cfg?.type.name ?? updated.ticket_type,
+          assignedDepartment: deptDef.label,
+          assignedTo: updated.assigned_to,
+          recipientEmails: [typeof updatedCustom.contactEmail === 'string' ? updatedCustom.contactEmail : null],
+          recipientPhone: typeof updatedCustom.contactMobile === 'string' ? updatedCustom.contactMobile : null,
+          note: body.forwardNotes ?? null,
+        });
+      }
 
       return NextResponse.json({
         ok: true,

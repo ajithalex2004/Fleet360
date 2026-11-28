@@ -8,11 +8,10 @@ import {
   ShieldCheck,
   RefreshCw,
   Zap,
-  ArrowUpRight,
-  BellRing,
   PhoneCall,
   ChevronRight,
   Calendar,
+  Sparkles,
 } from 'lucide-react';
 import Link from 'next/link';
 import { ACTIVE_TOGGLE } from '@/lib/ui/toggle';
@@ -51,6 +50,7 @@ interface SlaSummary {
 export default function ServiceTicketsSlaControlTower() {
   const [loading, setLoading] = useState(true);
   const [sweeping, setSweeping] = useState(false);
+  const [autoSweeping, setAutoSweeping] = useState(false);
   const [summary, setSummary] = useState<SlaSummary | null>(null);
   const [evaluations, setEvaluations] = useState<SlaEvaluationItem[]>([]);
   const [filterTier, setFilterTier] = useState<'ALL' | 'TIER_2' | 'TIER_3'>('ALL');
@@ -103,6 +103,32 @@ export default function ServiceTicketsSlaControlTower() {
     }
   };
 
+  const handleRunAutomationSweep = async () => {
+    setAutoSweeping(true);
+    setSweepNotice(null);
+    try {
+      const res = await fetch('/api/service-tickets/automation/sweep', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+      });
+      const json = await res.json().catch(() => ({}));
+      if (res.ok && json?.ok) {
+        const rep = json.report;
+        setSweepNotice(
+          `✅ Automation Sweep Complete: Evaluated ${rep?.evaluatedTickets ?? 0} ticket(s) — auto-closed ${rep?.autoClosedCount ?? 0}, sent ${rep?.remindersSentCount ?? 0} reminder(s).`
+        );
+        await fetchSlaData();
+      } else {
+        setSweepNotice(`❌ ${json?.error ?? 'Failed to execute automation sweep'}`);
+      }
+    } catch (e) {
+      console.error('Automation sweep failed', e);
+      setSweepNotice('❌ Failed to execute automation sweep');
+    } finally {
+      setAutoSweeping(false);
+    }
+  };
+
   const filteredItems = evaluations.filter((item) => {
     if (filterTier === 'TIER_2') return item.escalationTier === 'TIER_2_ESCALATED';
     if (filterTier === 'TIER_3') return item.escalationTier === 'TIER_3_BREACHED';
@@ -134,8 +160,23 @@ export default function ServiceTicketsSlaControlTower() {
             ← Back to Tickets
           </Link>
           <button
+            onClick={handleRunAutomationSweep}
+            disabled={autoSweeping || sweeping}
+            className="px-4 py-2 rounded-xl bg-violet-600 hover:bg-violet-500 text-white font-semibold text-xs flex items-center gap-2 shadow-lg shadow-violet-600/25 transition-all disabled:opacity-50"
+          >
+            {autoSweeping ? (
+              <>
+                <RefreshCw className="w-3.5 h-3.5 animate-spin" /> Running...
+              </>
+            ) : (
+              <>
+                <Sparkles className="w-3.5 h-3.5 text-violet-200" /> Run Automation Sweep
+              </>
+            )}
+          </button>
+          <button
             onClick={handleRunSweep}
-            disabled={sweeping}
+            disabled={sweeping || autoSweeping}
             className="px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-500 text-white font-semibold text-xs flex items-center gap-2 shadow-lg shadow-rose-600/30 transition-all disabled:opacity-50"
           >
             {sweeping ? (
