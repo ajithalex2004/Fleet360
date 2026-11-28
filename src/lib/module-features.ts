@@ -42,6 +42,9 @@ export interface ModuleFeatureDef {
   settingsField?: SettingsFlagField;
 }
 
+export const CUSTOMER_PORTAL_FSM_FLAG = 'customer-mgmt.portal-fsm' as const;
+export const CUSTOMER_PORTAL_TRANSPORT_FLAG = 'customer-mgmt.portal-transport' as const;
+
 const f = (
   module: ModuleKey,
   key: string,
@@ -110,6 +113,8 @@ export const MODULE_FEATURES: readonly ModuleFeatureDef[] = [
   // ── Customer Management ──
   f('customer-mgmt', 'customer-mgmt.hierarchy', 'Customer Hierarchy', 'Region / Department / Unit structure under each customer', true),
   f('customer-mgmt', 'customer-mgmt.credit-control', 'Credit Control', 'Credit limits and holds on customer accounts', false),
+  f('customer-mgmt', CUSTOMER_PORTAL_FSM_FLAG, 'Customer Portal — Field Services (FSM)', 'Allow this tenant to offer the Field Services Customer Portal (service requests, sites, equipment & SLAs)', true),
+  f('customer-mgmt', CUSTOMER_PORTAL_TRANSPORT_FLAG, 'Customer Portal — Transport Services', 'Allow this tenant to offer the Transport Services Customer Portal (Rent-a-Car, Leasing, Logistics, Staff & School Bus)', true),
 
   // ── Booking Portal ──
   f('booking-portal', 'booking-portal.approval-workflow', 'Booking Approvals', 'Line-manager approval before a booking is confirmed', true),

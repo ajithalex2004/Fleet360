@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { MODULES } from '@/lib/modules';
 import { defaultFeatureFlags, activeFeatureKeys, type FeatureFlagMap } from '@/lib/module-features';
 import { ModuleFeaturePicker, ALL_MODULE_KEYS } from '@/components/ModuleFeaturePicker';
+import { CustomerPortalsProvisioningCard } from '@/components/admin/CustomerPortalsProvisioningCard';
 import { effectiveTenantModules, resolvePolicies, type ModulePolicies } from '@/lib/module-policy-rules';
 
 interface PolicyResponse { policies: ModulePolicies; plans: { code: string; name: string }[] }
@@ -862,6 +863,12 @@ The tenant now has ${data.categories} categories and ${data.types} service types
               {/* ── TAB 2: Module Configuration ───────────────────────────── */}
               {activeTab === 'modules' && (
                 <div className="space-y-4">
+                  <CustomerPortalsProvisioningCard
+                    enabledModules={form.enabledModules}
+                    featureFlags={form.featureFlags}
+                    onModulesChange={(next) => set('enabledModules', next)}
+                    onFlagsChange={(next) => set('featureFlags', next)}
+                  />
                   <Section icon="⚙️" iconBg="bg-emerald-500/20" title="Module Configuration"
                     desc="Choose the modules this tenant can access and the feature flags enabled within each module">
                     <ModuleFeaturePicker

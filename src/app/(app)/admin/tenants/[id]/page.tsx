@@ -8,6 +8,7 @@ import { MODULES, resolveModuleKey } from '@/lib/modules';
 import { NAV_CATEGORIES, MODULES as SIDEBAR_MODULES } from '@/lib/nav/modules';
 import { MODULE_FEATURES, defaultFeatureFlags, type FeatureFlagMap } from '@/lib/module-features';
 import { ModuleFeaturePicker, TenantModuleFeatureSummary } from '@/components/ModuleFeaturePicker';
+import { CustomerPortalsProvisioningCard } from '@/components/admin/CustomerPortalsProvisioningCard';
 import { TenantAttachmentsPanel } from '@/components/TenantAttachmentsPanel';
 import NewUserDialog from '@/components/admin/NewUserDialog';
 import { useFetchedData } from '@/hooks/useFetchedData';
@@ -1218,6 +1219,13 @@ export default function TenantDetailPage() {
                 </button>
               </div>
             </div>
+            <CustomerPortalsProvisioningCard
+              enabledModules={enabledModules}
+              featureFlags={featureFlags}
+              onModulesChange={setEnabledModules}
+              onFlagsChange={setFeatureFlags}
+              allowOverrideAll={true}
+            />
             <ModuleFeaturePicker
               enabledModules={enabledModules}
               featureFlags={featureFlags}

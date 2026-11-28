@@ -24,9 +24,10 @@ import { withPlatformAdmin, withTenantRls, type TxClient } from '@/lib/rls';
 import { runOutsideRlsScope } from '@/lib/rls-scope';
 import { offeredCategories, tenantCategoryTitleMap } from '@/lib/transport-catalog/store';
 import {
-  CUSTOMER_PORTALS, categoryLabel, isCustomerPortal, isPortalRole, parsePortalRoleMap,
+  CUSTOMER_PORTALS, PORTAL_LABEL, categoryLabel, isCustomerPortal, isPortalRole, parsePortalRoleMap,
   type CustomerPortal, type PortalRole, type PortalRoleMap, type TransportCategoryCode,
 } from './catalog';
+import { getTenantPortalEntitlements } from './tenant-entitlements';
 
 export {
   PORTAL_ROLES, CUSTOMER_PORTALS, isPortalRole, isCustomerPortal,
@@ -144,23 +145,30 @@ export async function markPortalUserLoggedIn(tenantId: string, id: string): Prom
 }
 
 export async function customerHasPortal(tenantId: string, customerId: string, portal: CustomerPortal): Promise<boolean> {
-  const rows = await withTenantRls(prisma, tenantId, (tx) =>
-    tx.$queryRawUnsafe<Array<{ ok: number }>>(
-      `SELECT 1 AS ok FROM customer_portal_access WHERE tenant_id = $1 AND customer_id = $2 AND portal = $3`,
-      tenantId, customerId, portal,
-    ),
-  ).catch(() => [] as Array<{ ok: number }>);
-  return rows.length > 0;
+  return withTenantRls(prisma, tenantId, async (tx) => {
+    const [ent, rows] = await Promise.all([
+      getTenantPortalEntitlements(tenantId, tx),
+      tx.$queryRawUnsafe<Array<{ ok: number }>>(
+        `SELECT 1 AS ok FROM customer_portal_access WHERE tenant_id = $1 AND customer_id = $2 AND portal = $3`,
+        tenantId, customerId, portal,
+      ),
+    ]);
+    return ent.portals[portal].enabled && rows.length > 0;
+  }).catch(() => false);
 }
 
 export async function portalsForCustomer(tenantId: string, customerId: string): Promise<CustomerPortal[]> {
-  const rows = await withTenantRls(prisma, tenantId, (tx) =>
-    tx.$queryRawUnsafe<Array<{ portal: string }>>(
-      `SELECT portal FROM customer_portal_access WHERE tenant_id = $1 AND customer_id = $2 ORDER BY portal`,
-      tenantId, customerId,
-    ),
-  ).catch(() => [] as Array<{ portal: string }>);
-  return rows.map((r) => r.portal).filter(isCustomerPortal);
+  return withTenantRls(prisma, tenantId, async (tx) => {
+    const [ent, rows] = await Promise.all([
+      getTenantPortalEntitlements(tenantId, tx),
+      tx.$queryRawUnsafe<Array<{ portal: string }>>(
+        `SELECT portal FROM customer_portal_access WHERE tenant_id = $1 AND customer_id = $2 ORDER BY portal`,
+        tenantId, customerId,
+      ),
+    ]);
+    const allowed = new Set(ent.enabledPortals);
+    return rows.map((r) => r.portal).filter((p): p is CustomerPortal => isCustomerPortal(p) && allowed.has(p));
+  }).catch(() => [] as CustomerPortal[]);
 }
 
 // ── Staff onboarding ───────────────────────────────────────────────────────
@@ -224,6 +232,15 @@ export async function setCustomerPortalAccess(
       `SELECT id FROM customers WHERE id = $1 AND tenant_id = $2 AND deleted_at IS NULL`, customerId, tenantId,
     );
     if (!c) throw new PortalUserError('Customer not found.', 404);
+    if (enabled) {
+      const ent = await getTenantPortalEntitlements(tenantId, tx);
+      if (!ent.portals[portal].enabled) {
+        const reason = !ent.portals[portal].flagEnabled
+          ? `${PORTAL_LABEL[portal]} Customer Portal is disabled for this tenant in Admin → Tenants → Modules.`
+          : `${PORTAL_LABEL[portal]} requires its backing module to be enabled in Admin → Tenants → Modules.`;
+        throw new PortalUserError(reason, 403);
+      }
+    }
     if (enabled && portal === 'TRANSPORT' && categories) {
       // Only categories the tenant offers (Transport catalogue) can be given;
       // ones the customer already has stay even if no longer offered.

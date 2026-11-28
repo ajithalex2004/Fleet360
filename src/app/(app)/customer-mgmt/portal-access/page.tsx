@@ -52,6 +52,7 @@ export default function CustomerPortalAccessPage() {
   const [pickingCategories, setPickingCategories] = useState<CustomerRow | null>(null);
   const [offered, setOffered] = useState<TransportCategoryCode[]>([]);
   const [categoryLabels, setCategoryLabels] = useState<Record<string, string>>({});
+  const [enabledPortals, setEnabledPortals] = useState<CustomerPortal[]>(PORTALS);
   const [linkingRental, setLinkingRental] = useState<CustomerRow | null>(null);
 
   const load = useCallback(async () => {
@@ -59,6 +60,7 @@ export default function CustomerPortalAccessPage() {
     const d = await res.json().catch(() => null);
     if (!res.ok || !d?.ok) { setErr(d?.error ?? 'Could not load customers'); return; }
     setRows(d.customers); setCanEdit(!!d.canEdit); setOffered(d.offeredCategories ?? []); setCategoryLabels(d.categoryLabels ?? {});
+    if (Array.isArray(d.enabledPortals)) setEnabledPortals(d.enabledPortals);
   }, []);
   useEffect(() => { void load(); }, [load]);
 
@@ -73,69 +75,108 @@ export default function CustomerPortalAccessPage() {
     void load();
   }, [load]);
 
-  const columns = useMemo<SmartDataGridColumn<CustomerRow>[]>(() => [
-    { key: 'code', header: 'Customer ID', accessor: (c) => c.code ?? '', render: (c) => <span className="font-mono text-[11px]">{c.code ?? '—'}</span> },
-    { key: 'name', header: 'Customer', accessor: (c) => c.name, render: (c) => <span className="text-xs font-semibold">{c.name}</span> },
-    {
-      key: 'FSM', header: PORTAL_LABEL.FSM, align: 'center', filter: 'select',
-      accessor: (c) => (c.portals.includes('FSM') ? 'Enabled' : 'Off'),
-      render: (c) => (
-        <label className="inline-flex items-center gap-1.5 text-xs cursor-pointer" onClick={(e) => e.stopPropagation()}>
-          <input type="checkbox" checked={c.portals.includes('FSM')} disabled={!canEdit} onChange={() => void toggle(c, 'FSM')}
-            aria-label={`${PORTAL_LABEL.FSM} for ${c.name}`} className="rounded border-[var(--border-subtle)] text-blue-600 focus:ring-0" />
-          {c.portals.includes('FSM') ? 'Enabled' : 'Off'}
-        </label>
-      ),
-    },
-    {
-      key: 'TRANSPORT', header: PORTAL_LABEL.TRANSPORT, filter: 'select',
-      accessor: (c) => (c.portals.includes('TRANSPORT') ? 'Enabled' : 'Off'),
-      render: (c) => {
-        const on = c.portals.includes('TRANSPORT');
-        return (
-          <div className="flex flex-wrap items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
-            <label className="inline-flex items-center gap-1.5 text-xs cursor-pointer">
-              <input type="checkbox" checked={on} disabled={!canEdit} onChange={() => void toggle(c, 'TRANSPORT')}
-                aria-label={`${PORTAL_LABEL.TRANSPORT} for ${c.name}`} className="rounded border-[var(--border-subtle)] text-blue-600 focus:ring-0" />
-              {on ? '' : 'Off'}
-            </label>
-            {on && (c.transportCategories.length
-              ? c.transportCategories.map((k) => (
-                  <span key={k} className="px-1.5 py-0.5 rounded-full border border-blue-500/30 bg-blue-500/10 text-[10px] font-semibold text-blue-600">{categoryLabel(k, categoryLabels)}</span>
-                ))
-              : <span className="text-[10px] font-semibold text-amber-600">No categories</span>)}
-            {on && canEdit && (
-              <button type="button" onClick={() => setPickingCategories(c)} className="text-[10px] font-semibold text-blue-600 hover:underline">Edit</button>
-            )}
-            {on && c.transportCategories.includes('RAC') && (
-              <button type="button" disabled={!canEdit} onClick={() => setLinkingRental(c)}
-                className={`basis-full text-left text-[10px] font-semibold ${c.rentalCustomer ? 'text-[var(--text-muted)]' : 'text-amber-600'} ${canEdit ? 'hover:underline' : ''}`}>
-                {c.rentalCustomer ? `Rental customer: ${c.rentalCustomer.name}` : 'Link rental customer'}
-              </button>
-            )}
-          </div>
-        );
+  const showFsmCol = useMemo(
+    () => enabledPortals.includes('FSM') || (rows ?? []).some((r) => r.portals.includes('FSM')),
+    [enabledPortals, rows],
+  );
+  const showTransportCol = useMemo(
+    () => enabledPortals.includes('TRANSPORT') || (rows ?? []).some((r) => r.portals.includes('TRANSPORT')),
+    [enabledPortals, rows],
+  );
+
+  const columns = useMemo<SmartDataGridColumn<CustomerRow>[]>(() => {
+    const cols: SmartDataGridColumn<CustomerRow>[] = [
+      { key: 'code', header: 'Customer ID', accessor: (c) => c.code ?? '', render: (c) => <span className="font-mono text-[11px]">{c.code ?? '—'}</span> },
+      { key: 'name', header: 'Customer', accessor: (c) => c.name, render: (c) => <span className="text-xs font-semibold">{c.name}</span> },
+    ];
+    if (showFsmCol) {
+      const fsmAllowed = enabledPortals.includes('FSM');
+      cols.push({
+        key: 'FSM', header: PORTAL_LABEL.FSM, align: 'center', filter: 'select',
+        accessor: (c) => (c.portals.includes('FSM') ? 'Enabled' : 'Off'),
+        render: (c) => {
+          const on = c.portals.includes('FSM');
+          return (
+            <div className="inline-flex flex-col items-center gap-0.5" onClick={(e) => e.stopPropagation()}>
+              <label className="inline-flex items-center gap-1.5 text-xs cursor-pointer">
+                <input type="checkbox" checked={on} disabled={!canEdit || (!fsmAllowed && !on)} onChange={() => void toggle(c, 'FSM')}
+                  aria-label={`${PORTAL_LABEL.FSM} for ${c.name}`} className="rounded border-[var(--border-subtle)] text-blue-600 focus:ring-0" />
+                {on ? 'Enabled' : 'Off'}
+              </label>
+              {!fsmAllowed && on && <span className="text-[10px] font-semibold text-amber-600">Disabled in Admin</span>}
+            </div>
+          );
+        },
+      });
+    }
+    if (showTransportCol) {
+      const transportAllowed = enabledPortals.includes('TRANSPORT');
+      cols.push({
+        key: 'TRANSPORT', header: PORTAL_LABEL.TRANSPORT, filter: 'select',
+        accessor: (c) => (c.portals.includes('TRANSPORT') ? 'Enabled' : 'Off'),
+        render: (c) => {
+          const on = c.portals.includes('TRANSPORT');
+          return (
+            <div className="flex flex-wrap items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
+              <label className="inline-flex items-center gap-1.5 text-xs cursor-pointer">
+                <input type="checkbox" checked={on} disabled={!canEdit || (!transportAllowed && !on)} onChange={() => void toggle(c, 'TRANSPORT')}
+                  aria-label={`${PORTAL_LABEL.TRANSPORT} for ${c.name}`} className="rounded border-[var(--border-subtle)] text-blue-600 focus:ring-0" />
+                {on ? '' : 'Off'}
+              </label>
+              {!transportAllowed && on && <span className="text-[10px] font-semibold text-amber-600">Disabled in Admin</span>}
+              {on && (c.transportCategories.length
+                ? c.transportCategories.map((k) => (
+                    <span key={k} className="px-1.5 py-0.5 rounded-full border border-blue-500/30 bg-blue-500/10 text-[10px] font-semibold text-blue-600">{categoryLabel(k, categoryLabels)}</span>
+                  ))
+                : <span className="text-[10px] font-semibold text-amber-600">No categories</span>)}
+              {on && canEdit && transportAllowed && (
+                <button type="button" onClick={() => setPickingCategories(c)} className="text-[10px] font-semibold text-blue-600 hover:underline">Edit</button>
+              )}
+              {on && transportAllowed && c.transportCategories.includes('RAC') && (
+                <button type="button" disabled={!canEdit} onClick={() => setLinkingRental(c)}
+                  className={`basis-full text-left text-[10px] font-semibold ${c.rentalCustomer ? 'text-[var(--text-muted)]' : 'text-amber-600'} ${canEdit ? 'hover:underline' : ''}`}>
+                  {c.rentalCustomer ? `Rental customer: ${c.rentalCustomer.name}` : 'Link rental customer'}
+                </button>
+              )}
+            </div>
+          );
+        },
+      });
+    }
+    cols.push(
+      { key: 'users', header: 'Portal users', align: 'center', filter: false, accessor: (c) => c.activeUsers, render: (c) => <span className="text-xs">{c.activeUsers} active{c.invitedUsers ? ` · ${c.invitedUsers} invited` : ''}</span> },
+      {
+        key: 'actions', header: '', filter: false, sortable: false,
+        render: (c) => <SecondaryButton icon={Users} onClick={(e) => { e.stopPropagation(); setManaging(c); }}>Manage users</SecondaryButton>,
       },
-    },
-    { key: 'users', header: 'Portal users', align: 'center', filter: false, accessor: (c) => c.activeUsers, render: (c) => <span className="text-xs">{c.activeUsers} active{c.invitedUsers ? ` · ${c.invitedUsers} invited` : ''}</span> },
-    {
-      key: 'actions', header: '', filter: false, sortable: false,
-      render: (c) => <SecondaryButton icon={Users} onClick={(e) => { e.stopPropagation(); setManaging(c); }}>Manage users</SecondaryButton>,
-    },
-  ], [canEdit, categoryLabels, toggle]);
+    );
+    return cols;
+  }, [canEdit, categoryLabels, enabledPortals, showFsmCol, showTransportCol, toggle]);
 
   return (
     <div className="space-y-5 max-w-7xl">
       <PageHeader title="Customer Portal access" icon={KeyRound} accent="blue"
         subtitle="Choose the portals and Transport categories each customer gets, and invite their users. Customers sign in at /customer-portal." />
       {err && <FormAlert>{err}</FormAlert>}
+      {rows && enabledPortals.length === 0 && (
+        <FormAlert tone="warning">
+          Neither Field Services nor Transport Services Customer Portal is currently provisioned for this tenant. Enable them in{' '}
+          <Link href="/admin/tenants" className="underline font-semibold">Admin → Tenants → Modules</Link>.
+        </FormAlert>
+      )}
+      {rows && enabledPortals.length === 1 && (
+        <FormAlert tone="info">
+          This tenant is provisioned for <strong>{PORTAL_LABEL[enabledPortals[0]]}</strong> only. Platform admins can enable both portals in{' '}
+          <Link href="/admin/tenants" className="underline font-semibold">Admin → Tenants → Modules</Link>.
+        </FormAlert>
+      )}
       {!canEdit && rows && <FormAlert tone="info">View only. A tenant admin can change portal access and invite users.</FormAlert>}
       <SmartDataGrid<CustomerRow>
         rows={rows ?? []} columns={columns} getRowId={(c) => c.customerId} loading={!rows}
         emptyMessage="No customers yet. Add customers in Customer Management first."
         toolbar={{ title: 'Customers', exportName: 'customer-portal-access' }}
       />
-      {managing && <UsersPanel customer={managing} canEdit={canEdit} onClose={() => { setManaging(null); void load(); }} />}
+      {managing && <UsersPanel customer={managing} enabledPortals={enabledPortals} canEdit={canEdit} onClose={() => { setManaging(null); void load(); }} />}
       {linkingRental && (
         <RentalLinkDialog customer={linkingRental} onClose={() => setLinkingRental(null)}
           onSaved={() => { setLinkingRental(null); void load(); }} />
@@ -280,9 +321,10 @@ function RoleSelect({ value, onChange, disabled, label }: { value: PortalRole | 
   );
 }
 
-function UsersPanel({ customer, canEdit, onClose }: { customer: CustomerRow; canEdit: boolean; onClose: () => void }) {
+function UsersPanel({ customer, enabledPortals, canEdit, onClose }: { customer: CustomerRow; enabledPortals: CustomerPortal[]; canEdit: boolean; onClose: () => void }) {
+  const activeCustomerPortals = customer.portals.filter((p) => enabledPortals.includes(p));
   const initialRoles = (): Partial<Record<CustomerPortal, PortalRole | null>> =>
-    Object.fromEntries(customer.portals.map((p) => [p, 'REQUESTER']));
+    Object.fromEntries(activeCustomerPortals.map((p) => [p, 'REQUESTER']));
   const [users, setUsers] = useState<PortalAccount[] | null>(null);
   const [form, setForm] = useState({ email: '', fullName: '', mobile: '' });
   const [roles, setRoles] = useState(initialRoles);
@@ -322,8 +364,8 @@ function UsersPanel({ customer, canEdit, onClose }: { customer: CustomerRow; can
     void load();
   };
 
-  // Show a portal's role picker when the customer has it, or the user still holds a role there.
-  const portalsFor = (u?: PortalAccount) => PORTALS.filter((p) => customer.portals.includes(p) || !!u?.roles[p]);
+  // Show a portal's role picker when the tenant + customer have it, or the user still holds a legacy role there.
+  const portalsFor = (u?: PortalAccount) => PORTALS.filter((p) => activeCustomerPortals.includes(p) || !!u?.roles[p]);
 
   return (
     <div className="fixed inset-0 z-50 flex justify-end bg-black/50" role="dialog" aria-modal="true" aria-label={`Portal users for ${customer.name}`}>
