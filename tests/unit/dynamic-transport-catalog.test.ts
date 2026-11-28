@@ -12,7 +12,9 @@ import {
   cleanCustomFormConfig,
   cleanDefaultValue,
   cleanOverrides,
+  cleanSelectOptions,
   extractDefaultValues,
+  sameOptionsList,
   slugifyFieldKey,
   slugifySectionKey,
   validateRequestValues,
@@ -290,5 +292,104 @@ describe('dual-portal Booking Portal adapter', () => {
     const cloned = cloneTemplateToCustomForm('EXECUTIVE');
     expect(cloned.sections.length).toBe(CATEGORY_DEFINITIONS.EXECUTIVE.form.sections.length);
     expect(allFields(cloned).some((f) => f.key === 'tripType')).toBe(true);
+  });
+
+  it('supports adding, editing, reordering, and validating custom dropdown options on built-in select fields', () => {
+    expect(cleanSelectOptions(['  Apple Pay ', 'Corporate Account', 'Apple Pay', ''])).toEqual([
+      'Apple Pay',
+      'Corporate Account',
+    ]);
+    expect(cleanSelectOptions([])).toBeNull();
+    expect(cleanSelectOptions(['x'.repeat(81)])).toBeNull();
+    expect(sameOptionsList(['A', 'B'], ['A', 'B'])).toBe(true);
+    expect(sameOptionsList(['A', 'B'], ['B', 'A'])).toBe(false);
+
+    const racPaymentField = allFields(RAC).find((f) => f.key === 'paymentMethod');
+    expect(racPaymentField?.type).toBe('select');
+    const builtInOpts = racPaymentField?.options ?? [];
+    const extendedOpts = [...builtInOpts, 'Apple Pay', 'PO Invoice'];
+
+    // Accepts custom options AND setting one of the brand-new options as defaultValue in the same save
+    const cleaned = cleanOverrides(RAC, {
+      paymentMethod: {
+        options: extendedOpts,
+        defaultValue: 'Apple Pay',
+      },
+    });
+    expect(cleaned).toEqual({
+      paymentMethod: {
+        options: extendedOpts,
+        defaultValue: 'Apple Pay',
+      },
+    });
+
+    // Omits redundant options override when identical to built-in options
+    const identical = cleanOverrides(RAC, {
+      paymentMethod: { options: [...builtInOpts] },
+    });
+    expect(identical).toEqual({});
+
+    // Rejects options override on non-select fields or empty options
+    expect(cleanOverrides(RAC, { costCenter: { options: ['A', 'B'] } })).toBeNull();
+    expect(cleanOverrides(RAC, { paymentMethod: { options: [] } })).toBeNull();
+
+    // Applies custom options to effectiveForm and validates newly added value cleanly
+    const effective = applyOverrides(RAC, cleaned);
+    const effPayment = allFields(effective).find((f) => f.key === 'paymentMethod');
+    expect(effPayment?.options).toEqual(extendedOpts);
+    expect(effPayment?.defaultValue).toBe('Apple Pay');
+
+    const validCheck = validateRequestValues(effective, {
+      origin: 'DXB Terminal 3',
+      neededFrom: '2026-12-01',
+      paymentMethod: 'Apple Pay',
+      requestorName: 'Aisha',
+    });
+    expect(validCheck.errors.paymentMethod).toBeUndefined();
+    expect(validCheck.values.paymentMethod).toBe('Apple Pay');
+
+    // Clears stale defaultValue if the removed option was previously selected
+    const narrowed = applyOverrides(RAC, {
+      paymentMethod: { options: ['PO Invoice'], defaultValue: 'PO Invoice' },
+    });
+    const narrowedField = allFields(narrowed).find((f) => f.key === 'paymentMethod');
+    expect(narrowedField?.options).toEqual(['PO Invoice']);
+    const removedOldCheck = validateRequestValues(narrowed, {
+      origin: 'DXB',
+      neededFrom: '2026-12-01',
+      paymentMethod: builtInOpts[0],
+    });
+    expect(removedOldCheck.errors.paymentMethod).toBeDefined();
+  });
+
+  it('propagates custom select options overrides into Internal Booking Portal built-in schemas', () => {
+    const builtInSections: BookingSectionDef[] = [
+      {
+        title: 'Cargo, Packaging & Dimensions',
+        icon: '📦',
+        fields: [
+          { key: 'cargoType', label: 'Cargo Category', type: 'select', required: true, options: ['General Goods'] },
+        ],
+      },
+    ];
+    const logCat: BookingCatalogCategory = {
+      ...customCat,
+      category: 'LOGISTICS',
+      bookingServiceType: 'LOGISTICS',
+      isCustom: false,
+      fieldOverrides: {
+        cargoType: { options: ['General Goods', 'Pharma Cold Chain', 'High-Value Electronics'] },
+      },
+      customFormConfig: {},
+      effectiveForm: LOGISTICS,
+      defaultValues: {},
+    };
+
+    const resolved = resolveDynamicBookingSchema('LOGISTICS', builtInSections, logCat);
+    expect(resolved[0].fields[0].options).toEqual([
+      'General Goods',
+      'Pharma Cold Chain',
+      'High-Value Electronics',
+    ]);
   });
 });
