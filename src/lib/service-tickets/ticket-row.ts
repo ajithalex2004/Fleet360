@@ -39,6 +39,10 @@ export interface TicketRow {
   primary_technician_id?: string | null;
   assigned_team_id?: string | null;
   territory_id?: string | null;
+  parent_ticket_id?: string | null;
+  scheduled_start_at?: string | null;
+  scheduled_end_at?: string | null;
+  first_time_fix?: boolean | string | null;
 }
 
 export const TICKET_BASE_COLS = `id::text, tenant_id, ticket_type, readable_id, requestor_id, requestor_name,
@@ -55,7 +59,11 @@ export const FSM_REQUEST_COLS = `
   to_jsonb(service_tickets) ->> 'entitlement_type'      AS entitlement_type,
   to_jsonb(service_tickets) ->> 'primary_technician_id' AS primary_technician_id,
   to_jsonb(service_tickets) ->> 'assigned_team_id'      AS assigned_team_id,
-  to_jsonb(service_tickets) ->> 'territory_id'          AS territory_id`;
+  to_jsonb(service_tickets) ->> 'territory_id'          AS territory_id,
+  to_jsonb(service_tickets) ->> 'parent_ticket_id'      AS parent_ticket_id,
+  to_jsonb(service_tickets) ->> 'scheduled_start_at'    AS scheduled_start_at,
+  to_jsonb(service_tickets) ->> 'scheduled_end_at'      AS scheduled_end_at,
+  to_jsonb(service_tickets) ->> 'first_time_fix'        AS first_time_fix`;
 
 export function ticketRowToApi(r: TicketRow, matrix?: SlaMatrix) {
   const priority = r.priority as TicketPriority;
@@ -96,6 +104,15 @@ export function ticketRowToApi(r: TicketRow, matrix?: SlaMatrix) {
     primaryTechnicianId: r.primary_technician_id ?? null,
     assignedTeamId: r.assigned_team_id ?? null,
     territoryId: r.territory_id ?? null,
+    parentTicketId: r.parent_ticket_id ?? null,
+    scheduledStartAt: r.scheduled_start_at ?? null,
+    scheduledEndAt: r.scheduled_end_at ?? null,
+    firstTimeFix:
+      r.first_time_fix === true || r.first_time_fix === 'true'
+        ? true
+        : r.first_time_fix === false || r.first_time_fix === 'false'
+          ? false
+          : null,
   };
 }
 export type ApiTicket = ReturnType<typeof ticketRowToApi>;

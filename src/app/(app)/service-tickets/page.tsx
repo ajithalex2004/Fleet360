@@ -17,7 +17,7 @@
 
 import { useEffect, useMemo, useState, useCallback, useRef } from 'react';
 import Link from 'next/link';
-import { Headphones, Plus, AlertCircle, Clock, ChevronRight, Star, Send, Inbox, ExternalLink, ListTree, Users } from 'lucide-react';
+import { Headphones, Plus, AlertCircle, Clock, ChevronRight, Star, Send, Inbox, ExternalLink, ListTree, Users, Calendar, Smartphone } from 'lucide-react';
 import { PageHeader } from '@/components/ui/page-theme';
 import SmartDataGrid, { type SmartDataGridColumn, type KpiTile, type BulkAction } from '@/components/ui/SmartDataGrid';
 import { TICKET_DEPARTMENTS, TICKET_PRIORITIES } from '@/types/service-tickets';
@@ -583,6 +583,18 @@ export default function ServiceTicketsHome() {
         accent="violet"
         actions={
           <div className="flex flex-wrap items-center gap-2">
+            <Link
+              href="/service-tickets/dispatch"
+              className="inline-flex items-center gap-1.5 rounded-xl bg-slate-900 border border-sky-500/30 px-3.5 py-2 text-xs font-semibold text-sky-300 hover:bg-sky-950/40 hover:border-sky-500/60 transition-all shadow-sm"
+            >
+              <Calendar className="w-3.5 h-3.5 text-sky-400" /> Dispatch &amp; Map
+            </Link>
+            <Link
+              href="/service-tickets/field-app"
+              className="inline-flex items-center gap-1.5 rounded-xl bg-slate-900 border border-emerald-500/30 px-3.5 py-2 text-xs font-semibold text-emerald-300 hover:bg-emerald-950/40 hover:border-emerald-500/60 transition-all shadow-sm"
+            >
+              <Smartphone className="w-3.5 h-3.5 text-emerald-400" /> Field App
+            </Link>
             <Link
               href="/service-tickets/technicians"
               className="inline-flex items-center gap-1.5 rounded-xl bg-slate-900 border border-cyan-500/30 px-3.5 py-2 text-xs font-semibold text-cyan-300 hover:bg-cyan-950/40 hover:border-cyan-500/60 transition-all shadow-sm"

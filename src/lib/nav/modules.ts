@@ -500,6 +500,8 @@ export const MODULES: ModuleDef[] = [
     icon: Headphones,
     subPages: [
       { label: 'Service Tickets', href: '/service-tickets', icon: LayoutDashboard },
+      { label: 'Dispatch Board & Map', href: '/service-tickets/dispatch', icon: Calendar },
+      { label: 'Technician Field App', href: '/service-tickets/field-app', icon: Smartphone },
       { label: 'Technicians & Teams', href: '/service-tickets/technicians', icon: Users },
       { label: 'Service Catalog & SLA', href: '/service-tickets/catalog', icon: ListTree },
       { label: 'SLA Matrix', href: '/service-tickets/sla', icon: Clock },
