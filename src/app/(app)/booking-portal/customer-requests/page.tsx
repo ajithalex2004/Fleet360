@@ -14,9 +14,9 @@ import SmartDataGrid, { type SmartDataGridColumn } from '@/components/ui/SmartDa
 import {
   FormPanel, FormSection, FormField, FormAlert, FormFooter, TextInput, TextAreaInput, SelectInput, PrimaryButton, SecondaryButton,
 } from '@/components/ui/form-kit';
-import { TRANSPORT_CATEGORIES, TRANSPORT_CATEGORY_LABEL } from '@/lib/customer-portal/catalog';
+import { TRANSPORT_CATEGORIES, TRANSPORT_CATEGORY_LABEL, isTransportCategory } from '@/lib/customer-portal/catalog';
 import { CATEGORY_DEFINITIONS } from '@/lib/transport-catalog/default-forms';
-import { allFields } from '@/lib/transport-catalog/form-schema';
+import { allFields, type RequestFormDef } from '@/lib/transport-catalog/form-schema';
 import {
   fmtDateTime, fmtService, MODULE_LABEL, ROUTED_CATEGORIES, STATUS_LABEL, STATUS_TONE, type TransportRequest, type TransportStatus,
 } from '@/app/customer-portal/transport/transport-shared';
@@ -44,12 +44,46 @@ const STATUS_FILTERS = [
   { value: 'COMPLETED', label: 'Completed' }, { value: '', label: 'All' },
 ];
 
+interface CatalogOption {
+  category: string;
+  title: string;
+  effectiveForm: RequestFormDef;
+}
+
 export default function CustomerRequestsPage() {
   const [status, setStatus] = useState('active');
   const [category, setCategory] = useState('');
   const [rows, setRows] = useState<StaffRequest[] | null>(null);
+  const [catalogCats, setCatalogCats] = useState<CatalogOption[]>([]);
   const [err, setErr] = useState<string | null>(null);
   const [open, setOpen] = useState<StaffRequest | null>(null);
+
+  useEffect(() => {
+    void (async () => {
+      try {
+        const res = await fetch('/api/booking-portal/catalog', { cache: 'no-store' });
+        const d = await res.json().catch(() => null);
+        if (res.ok && d?.ok && Array.isArray(d.categories)) {
+          setCatalogCats(d.categories);
+        }
+      } catch {
+        // Fallback to built-in categories
+      }
+    })();
+  }, []);
+
+  const serviceOptions = useMemo(() => {
+    if (catalogCats.length > 0) {
+      return catalogCats.map((c) => ({ value: c.category, label: c.title }));
+    }
+    return TRANSPORT_CATEGORIES.map((c) => ({ value: c, label: TRANSPORT_CATEGORY_LABEL[c] }));
+  }, [catalogCats]);
+
+  const formByCategory = useMemo(() => {
+    const map: Record<string, RequestFormDef> = {};
+    for (const c of catalogCats) map[c.category] = c.effectiveForm;
+    return map;
+  }, [catalogCats]);
 
   const load = useCallback(async () => {
     const q = new URLSearchParams();
@@ -88,7 +122,7 @@ export default function CustomerRequestsPage() {
         <label className="text-xs font-semibold min-w-[200px]">Service
           <SelectInput value={category} onChange={(e) => setCategory(e.target.value)} className="mt-1">
             <option value="">All services</option>
-            {TRANSPORT_CATEGORIES.map((c) => <option key={c} value={c}>{TRANSPORT_CATEGORY_LABEL[c]}</option>)}
+            {serviceOptions.map((c) => <option key={c.value} value={c.value}>{c.label}</option>)}
           </SelectInput>
         </label>
       </div>
@@ -96,16 +130,29 @@ export default function CustomerRequestsPage() {
         rows={rows ?? []} columns={columns} getRowId={(r) => r.id} loading={!rows} onRowClick={(r) => setOpen(r)}
         emptyMessage="No customer requests here." toolbar={{ title: 'Customer Transport requests', exportName: 'customer-transport-requests' }}
       />
-      {open && <RequestDrawer r={open} onClose={() => setOpen(null)} onChanged={(r) => { setOpen(r); void load(); }} />}
+      {open && (
+        <RequestDrawer
+          r={open}
+          effectiveForm={formByCategory[open.category]}
+          onClose={() => setOpen(null)}
+          onChanged={(r) => { setOpen(r); void load(); }}
+        />
+      )}
     </div>
   );
 }
 
-function RequestDrawer({ r, onClose, onChanged }: { r: StaffRequest; onClose: () => void; onChanged: (r: StaffRequest) => void }) {
+function RequestDrawer({ r, effectiveForm, onClose, onChanged }: {
+  r: StaffRequest; effectiveForm?: RequestFormDef; onClose: () => void; onChanged: (r: StaffRequest) => void;
+}) {
   const [form, setForm] = useState({ driverName: r.driver?.name ?? '', driverPhone: r.driver?.phone ?? '', vehicle: r.vehicle ?? '', note: '', staffNote: r.staffNote ?? '' });
   const [busy, setBusy] = useState<Action | null>(null);
   const [err, setErr] = useState<string | null>(null);
-  const fields = useMemo(() => allFields(CATEGORY_DEFINITIONS[r.category].form), [r.category]);
+  const fields = useMemo(() => {
+    if (effectiveForm) return allFields(effectiveForm);
+    if (isTransportCategory(r.category)) return allFields(CATEGORY_DEFINITIONS[r.category].form);
+    return [];
+  }, [effectiveForm, r.category]);
   // Answers in form order, then any the form no longer has.
   const answers = useMemo(() => {
     const known = fields.filter((f) => f.key in r.values).map((f) => [f.label, r.values[f.key]] as const);

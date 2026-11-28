@@ -16,10 +16,13 @@ import {
   Download,
   Building2,
 } from 'lucide-react';
-import { PageHeader, KpiCard, StatGrid, type PageAccent } from '@/components/ui/page-theme';
+import { KpiCard, StatGrid, type PageAccent } from '@/components/ui/page-theme';
 import { usePermissions } from '@/contexts/PermissionContext';
 import { PassengerDriverChat } from '@/components/booking/PassengerDriverChat';
-import { SERVICE_MODULE_MAP } from '@/lib/booking-portal/service-module-map';
+import {
+  buildDynamicServiceCards,
+  type BookingCatalogCategory,
+} from '@/lib/booking-portal/catalog-adapter';
 
 interface Booking {
   id: string;
@@ -131,28 +134,50 @@ const SERVICE_CARDS = [
   },
 ];
 
-const ALL_TYPES = ['ALL', 'RENTAL', 'LEASING', 'STAFF_TRANSPORT', 'EXECUTIVE', 'LOGISTICS', 'SCHOOL_BUS'];
-
 // ── Main Page ─────────────────────────────────────────────────────────────────
 
 export default function BookingPortal() {
   const { hasModule, tenant } = usePermissions();
   const [bookings,    setBookings]    = useState<Booking[]>([]);
+  const [catalog,     setCatalog]     = useState<BookingCatalogCategory[] | null>(null);
   const [loading,     setLoading]     = useState(true);
   const [error,       setError]       = useState('');
   const [typeFilter,  setTypeFilter]  = useState('ALL');
   const [search,      setSearch]      = useState('');
 
-  // Dynamically filter service cards based on tenant's enabled modules
+  useEffect(() => {
+    let active = true;
+    void (async () => {
+      try {
+        const res = await fetch('/api/booking-portal/catalog', { cache: 'no-store' });
+        const d = await res.json().catch(() => null);
+        if (active && res.ok && d?.ok && Array.isArray(d.categories)) {
+          setCatalog(d.categories);
+        }
+      } catch {
+        // Fallback to built-in SERVICE_CARDS
+      }
+    })();
+    return () => { active = false; };
+  }, []);
+
+  // Dynamically resolve service cards from tenant catalogue + enabled modules
   const visibleCards = React.useMemo(() => {
-    if (!tenant || !tenant.enabledModules || tenant.enabledModules.length === 0) {
-      return SERVICE_CARDS;
+    const hasTenantModuleRestrictions = !!(tenant && tenant.enabledModules && tenant.enabledModules.length > 0);
+    return buildDynamicServiceCards(SERVICE_CARDS, catalog, hasModule, hasTenantModuleRestrictions);
+  }, [catalog, hasModule, tenant]);
+
+  const serviceStyleMap = React.useMemo(() => {
+    const map: Record<string, { label: string; color: string; icon: string }> = { ...SERVICE_STYLE };
+    for (const c of visibleCards) {
+      map[c.type] = {
+        label: c.title,
+        color: SERVICE_STYLE[c.type]?.color ?? 'text-cyan-400',
+        icon: c.icon,
+      };
     }
-    return SERVICE_CARDS.filter((card) => {
-      const requiredModule = SERVICE_MODULE_MAP[card.type];
-      return !requiredModule || hasModule(requiredModule);
-    });
-  }, [hasModule, tenant]);
+    return map;
+  }, [visibleCards]);
 
   const activeTypes = React.useMemo(() => {
     const cardTypes = visibleCards.map((c) => c.type);
@@ -469,7 +494,7 @@ export default function BookingPortal() {
                   ? 'bg-gradient-to-r from-amber-500 via-yellow-500 to-amber-600 text-black shadow-md shadow-amber-500/25'
                   : 'text-[var(--text-muted)] border border-[var(--border-subtle)] hover:text-[var(--text-main)] hover:bg-[var(--bg-surface)]'
               }`}>
-              {SERVICE_STYLE[t]?.icon} {t === 'ALL' ? 'All Services' : SERVICE_STYLE[t]?.label ?? t}
+              {serviceStyleMap[t]?.icon} {t === 'ALL' ? 'All Services' : serviceStyleMap[t]?.label ?? t}
               <span className="ml-1 opacity-70">({counts[t] ?? 0})</span>
             </button>
           ))}
@@ -529,7 +554,7 @@ export default function BookingPortal() {
               </thead>
               <tbody>
                 {filtered.map(b => {
-                  const svc    = SERVICE_STYLE[b.serviceType] ?? { label: b.serviceType, color: 'text-[var(--text-muted)]', icon: '📋' };
+                  const svc    = serviceStyleMap[b.serviceType] ?? { label: b.serviceType, color: 'text-[var(--text-muted)]', icon: '📋' };
                   const parsed = parseNotes(b.notes);
                   const route  = parsed.origin && parsed.destination
                     ? `${parsed.origin} → ${parsed.destination}`

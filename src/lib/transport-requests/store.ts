@@ -16,9 +16,9 @@
 
 import { prisma } from '@/lib/prisma';
 import { withTenantRls, type TxClient } from '@/lib/rls';
-import { isTransportCategory, TRANSPORT_CATEGORY_LABEL, type TransportCategory } from '@/lib/customer-portal/catalog';
+import { categoryLabel, isValidCategoryCode, type TransportCategoryCode } from '@/lib/customer-portal/catalog';
 import { getCustomer } from '@/lib/service-tickets/customer-context';
-import { customerTransportCategories, getTenantCategory } from '@/lib/transport-catalog/store';
+import { customerTransportCategories, getTenantCategory, tenantCategoryTitleMap } from '@/lib/transport-catalog/store';
 import { validateRequestValues, type RequestValues } from '@/lib/transport-catalog/form-schema';
 import { createShippingRequest } from '@/lib/logistics/domain';
 import { nextRentalSerial } from '@/lib/rental/locks';
@@ -47,7 +47,7 @@ export interface TransportRequestAttachment {
 export interface CustomerTransportRequest {
   id: string;
   requestNo: string;
-  category: TransportCategory;
+  category: TransportCategoryCode;
   categoryTitle: string;
   status: TransportRequestStatus;
   values: RequestValues;
@@ -146,11 +146,11 @@ function splitFormValues(raw: Record<string, unknown> | null): {
   return { values, attachments };
 }
 
-function toCustomer(r: Row): CustomerTransportRequest {
-  const category = (isTransportCategory(r.category) ? r.category : 'RAC') as TransportCategory;
+function toCustomer(r: Row, titleMap?: Record<string, string>): CustomerTransportRequest {
+  const category = (isValidCategoryCode(r.category) ? r.category : 'RAC') as TransportCategoryCode;
   const { values, attachments } = splitFormValues(r.form_values as Record<string, unknown> | null);
   return {
-    id: r.id, requestNo: r.request_no, category, categoryTitle: TRANSPORT_CATEGORY_LABEL[category], status: r.status,
+    id: r.id, requestNo: r.request_no, category, categoryTitle: categoryLabel(category, titleMap), status: r.status,
     values, attachments, pickup: r.pickup, dropoff: r.dropoff, serviceDate: r.service_date, serviceTime: r.service_time,
     vehicleCategory: r.vehicle_category, requestedByName: r.requested_by_name,
     driver: r.assigned_driver_name ? { name: r.assigned_driver_name, phone: r.assigned_driver_phone } : null,
@@ -159,8 +159,8 @@ function toCustomer(r: Row): CustomerTransportRequest {
   };
 }
 
-function toStaff(r: Row): StaffTransportRequest {
-  return { ...toCustomer(r), customerId: r.customer_id, customerName: r.customer_name ?? null, customerCode: r.customer_code ?? null, staffNote: r.staff_note };
+function toStaff(r: Row, titleMap?: Record<string, string>): StaffTransportRequest {
+  return { ...toCustomer(r, titleMap), customerId: r.customer_id, customerName: r.customer_name ?? null, customerCode: r.customer_code ?? null, staffNote: r.staff_note };
 }
 
 const str = (v: unknown) => (typeof v === 'string' && v.trim() ? v.trim() : null);
@@ -347,11 +347,12 @@ export async function createTransportRequest(args: {
   category: unknown; values: unknown; customerNote?: unknown; attachments?: unknown;
 }): Promise<CustomerTransportRequest> {
   const { tenantId, customerId, user } = args;
-  if (!isTransportCategory(args.category)) throw new TransportRequestError('Unknown Transport category.');
+  if (!isValidCategoryCode(args.category)) throw new TransportRequestError('Unknown Transport category.');
   const category = args.category;
   const allowed = await customerTransportCategories(tenantId, customerId);
+  const titleMap = await tenantCategoryTitleMap(tenantId);
   if (!allowed.some((c) => c.category === category)) {
-    throw new TransportRequestError(`${TRANSPORT_CATEGORY_LABEL[category]} is not available for your company.`, 403);
+    throw new TransportRequestError(`${categoryLabel(category, titleMap)} is not available for your company.`, 403);
   }
   const cat = await getTenantCategory(tenantId, category);
   const check = validateRequestValues(cat.effectiveForm, args.values);
@@ -383,7 +384,7 @@ export async function createTransportRequest(args: {
         row.routed_module = routed.module; row.routed_record_ref = routed.ref;
       }
     }
-    return toCustomer(row);
+    return toCustomer(row, titleMap);
   });
 }
 
@@ -393,25 +394,33 @@ export async function listCustomerTransportRequests(
   const where = ['r.tenant_id = $1', 'r.customer_id = $2'];
   const args: unknown[] = [tenantId, customerId];
   if (opts.scope === 'active') { args.push(ACTIVE_TRANSPORT_STATUSES); where.push(`r.status = ANY($${args.length}::text[])`); }
-  if (opts.category && isTransportCategory(opts.category)) { args.push(opts.category); where.push(`r.category = $${args.length}`); }
+  if (opts.category && isValidCategoryCode(opts.category)) { args.push(opts.category); where.push(`r.category = $${args.length}`); }
   if (opts.from && !Number.isNaN(Date.parse(opts.from))) { args.push(opts.from); where.push(`r.created_at >= $${args.length}::timestamptz`); }
-  const rows = await withTenantRls(prisma, tenantId, (tx) =>
-    tx.$queryRawUnsafe<Row[]>(
-      `SELECT ${COLS} FROM customer_transport_requests r WHERE ${where.join(' AND ')} ORDER BY r.created_at DESC LIMIT 500`,
-      ...args,
-    ),
-  );
-  return rows.map(toCustomer);
+  const [rows, titleMap] = await withTenantRls(prisma, tenantId, async (tx) => {
+    const [list, map] = await Promise.all([
+      tx.$queryRawUnsafe<Row[]>(
+        `SELECT ${COLS} FROM customer_transport_requests r WHERE ${where.join(' AND ')} ORDER BY r.created_at DESC LIMIT 500`,
+        ...args,
+      ),
+      tenantCategoryTitleMap(tenantId, tx),
+    ]);
+    return [list, map] as const;
+  });
+  return rows.map((r) => toCustomer(r, titleMap));
 }
 
 export async function getCustomerTransportRequest(tenantId: string, customerId: string, id: string): Promise<CustomerTransportRequest | null> {
-  const rows = await withTenantRls(prisma, tenantId, (tx) =>
-    tx.$queryRawUnsafe<Row[]>(
-      `SELECT ${COLS} FROM customer_transport_requests r WHERE r.tenant_id = $1 AND r.customer_id = $2 AND r.id::text = $3`,
-      tenantId, customerId, id,
-    ),
-  ).catch(() => [] as Row[]);
-  return rows[0] ? toCustomer(rows[0]) : null;
+  const [rows, titleMap] = await withTenantRls(prisma, tenantId, async (tx) => {
+    const [list, map] = await Promise.all([
+      tx.$queryRawUnsafe<Row[]>(
+        `SELECT ${COLS} FROM customer_transport_requests r WHERE r.tenant_id = $1 AND r.customer_id = $2 AND r.id::text = $3`,
+        tenantId, customerId, id,
+      ),
+      tenantCategoryTitleMap(tenantId, tx),
+    ]);
+    return [list, map] as const;
+  }).catch(() => [[] as Row[], {} as Record<string, string>] as const);
+  return rows[0] ? toCustomer(rows[0], titleMap) : null;
 }
 
 /** A customer may cancel while nothing has been arranged yet. */
@@ -428,7 +437,8 @@ export async function cancelCustomerTransportRequest(
     if (!['PENDING_APPROVAL', 'SUBMITTED'].includes(cur.status)) {
       throw new TransportRequestError('This request is already being arranged. Contact your service provider to cancel it.', 409);
     }
-    return toCustomer(await applyStatus(tx, tenantId, cur, 'CANCELLED', `${userName} (customer)`, {}));
+    const titleMap = await tenantCategoryTitleMap(tenantId, tx);
+    return toCustomer(await applyStatus(tx, tenantId, cur, 'CANCELLED', `${userName} (customer)`, {}), titleMap);
   });
 }
 
@@ -490,17 +500,21 @@ export async function listTenantTransportRequests(
   const args: unknown[] = [tenantId];
   if (opts.status === 'active') { args.push(ACTIVE_TRANSPORT_STATUSES); where.push(`r.status = ANY($${args.length}::text[])`); }
   else if (opts.status) { args.push(opts.status); where.push(`r.status = $${args.length}`); }
-  if (opts.category && isTransportCategory(opts.category)) { args.push(opts.category); where.push(`r.category = $${args.length}`); }
-  const rows = await withTenantRls(prisma, tenantId, (tx) =>
-    tx.$queryRawUnsafe<Row[]>(
-      `SELECT ${COLS}, c.name_en AS customer_name, c.customer_code
-         FROM customer_transport_requests r
-         LEFT JOIN customers c ON c.id = r.customer_id AND c.tenant_id = r.tenant_id
-        WHERE ${where.join(' AND ')} ORDER BY r.created_at DESC LIMIT 500`,
-      ...args,
-    ),
-  );
-  return rows.map(toStaff);
+  if (opts.category && isValidCategoryCode(opts.category)) { args.push(opts.category); where.push(`r.category = $${args.length}`); }
+  const [rows, titleMap] = await withTenantRls(prisma, tenantId, async (tx) => {
+    const [list, map] = await Promise.all([
+      tx.$queryRawUnsafe<Row[]>(
+        `SELECT ${COLS}, c.name_en AS customer_name, c.customer_code
+           FROM customer_transport_requests r
+           LEFT JOIN customers c ON c.id = r.customer_id AND c.tenant_id = r.tenant_id
+          WHERE ${where.join(' AND ')} ORDER BY r.created_at DESC LIMIT 500`,
+        ...args,
+      ),
+      tenantCategoryTitleMap(tenantId, tx),
+    ]);
+    return [list, map] as const;
+  });
+  return rows.map((r) => toStaff(r, titleMap));
 }
 
 /** Moves a request to its next stage (see TRANSITIONS); approving also routes it to its module. */
@@ -527,12 +541,13 @@ export async function staffTransportAction(
     if (!from.includes(cur.status)) {
       throw new TransportRequestError(`Cannot ${action} a request that is ${cur.status.replace(/_/g, ' ').toLowerCase()}.`, 409);
     }
+    const titleMap = await tenantCategoryTitleMap(tenantId, tx);
     if (to === null) {
       const sent = await sendToModule(tx, tenantId, cur, staff);
       const [n] = await tx.$queryRawUnsafe<Array<{ name_en: string | null; customer_code: string | null }>>(
         `SELECT name_en, customer_code FROM customers WHERE id = $1 AND tenant_id = $2`, sent.customer_id, tenantId,
       );
-      return toStaff({ ...sent, customer_name: n?.name_en ?? null, customer_code: n?.customer_code ?? null });
+      return toStaff({ ...sent, customer_name: n?.name_en ?? null, customer_code: n?.customer_code ?? null }, titleMap);
     }
     let row = await applyStatus(tx, tenantId, cur, to, staff.name, {
       driverName, driverPhone, vehicle, note, staffNote: str(input.staffNote)?.slice(0, 1000) ?? null,
@@ -547,6 +562,6 @@ export async function staffTransportAction(
     const [named] = await tx.$queryRawUnsafe<Array<{ name_en: string | null; customer_code: string | null }>>(
       `SELECT name_en, customer_code FROM customers WHERE id = $1 AND tenant_id = $2`, row.customer_id, tenantId,
     );
-    return toStaff({ ...row, customer_name: named?.name_en ?? null, customer_code: named?.customer_code ?? null });
+    return toStaff({ ...row, customer_name: named?.name_en ?? null, customer_code: named?.customer_code ?? null }, titleMap);
   });
 }

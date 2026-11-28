@@ -14,7 +14,7 @@ import {
   LayoutDashboard, PlusCircle, Activity, History, Boxes, LogOut, Wrench, Truck, Loader2, PackageOpen, Users, CarFront,
 } from 'lucide-react';
 import { ModuleSubNav, type ModuleTab } from '@/components/ui/module-subnav';
-import { canRaiseRequests, ROLE_LABEL, type CustomerPortal, type PortalRole, type TransportCategory } from '@/lib/customer-portal/catalog';
+import { canRaiseRequests, ROLE_LABEL, type CustomerPortal, type PortalRole, type TransportCategoryCode } from '@/lib/customer-portal/catalog';
 
 export interface PortalMe {
   user: {
@@ -23,7 +23,7 @@ export interface PortalMe {
   };
   customer: { id: string; code: string; name: string };
   portals: CustomerPortal[];
-  transportCategories: Array<{ category: TransportCategory; title: string; description: string; menu: string[]; approvalRequired: boolean }>;
+  transportCategories: Array<{ category: TransportCategoryCode; title: string; description: string; menu: string[]; approvalRequired: boolean }>;
 }
 
 const PortalContext = createContext<PortalMe | null>(null);
@@ -95,7 +95,7 @@ export default function PortalShell({ children }: { children: React.ReactNode })
 
   const role = me.user.roles[section];
   const S = SECTION[section];
-  const hasCategory = (c: TransportCategory) => section === 'TRANSPORT' && me.transportCategories.some((x) => x.category === c);
+  const hasCategory = (c: TransportCategoryCode) => section === 'TRANSPORT' && me.transportCategories.some((x) => x.category === c);
   const categoryTabs: ModuleTab[] = [
     ...(hasCategory('LOGISTICS') ? [{ href: '/customer-portal/transport/shipments', label: 'Shipments', icon: PackageOpen }] : []),
     ...(hasCategory('RAC') ? [{ href: '/customer-portal/transport/rentals', label: 'Rentals', icon: CarFront }] : []),

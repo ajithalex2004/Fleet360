@@ -1,7 +1,7 @@
 'use client';
 export const dynamic = 'force-dynamic';
 import { formInputCls } from '@/components/ui/form-kit';
-import React, { useState, useEffect, Suspense, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, Suspense, useMemo, useCallback, useRef } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import {
@@ -27,7 +27,13 @@ import {
   ExternalLink,
 } from 'lucide-react';
 import { usePermissions } from '@/contexts/PermissionContext';
-import { SERVICE_MODULE_MAP } from '@/lib/booking-portal/service-module-map';
+import {
+  buildDynamicServiceCards,
+  findCatalogCategoryForBookingType,
+  mergeCatalogDefaults,
+  resolveDynamicBookingSchema,
+  type BookingCatalogCategory,
+} from '@/lib/booking-portal/catalog-adapter';
 import { calculateInstantQuotation } from '@/lib/pricing/instant-quotation';
 import { InteractiveRoutePicker } from '@/components/booking/InteractiveRoutePicker';
 import { AssetAvailabilitySelector } from '@/components/booking/AssetAvailabilitySelector';
@@ -1186,7 +1192,7 @@ function computeSchoolBusEstimate(form: FormData) {
 }
 
 function buildPayload(
-  serviceType: ServiceType,
+  serviceType: string,
   form: FormData,
   attachments: UploadedBookingDocument[] = []
 ) {
@@ -1337,7 +1343,7 @@ function FormSection({
   section: SectionDef;
   form: FormData;
   onChange: (k: string, v: string | boolean | number) => void;
-  serviceType: ServiceType;
+  serviceType: string;
 }) {
   const originField = section.fields.find((f) => f.key === 'origin');
   const destField = section.fields.find((f) => f.key === 'destination');
@@ -1352,11 +1358,17 @@ function FormSection({
   const hasRequired =
     hasRoutePicker || visibleFields.some((f) => f.required);
 
-  const hideDestination = serviceType === 'RENTAL' && !!form.sameReturnLoc;
+  const hideDestination =
+    (serviceType === 'RENTAL' && !!form.sameReturnLoc) ||
+    (hasRoutePicker && !destField);
   const destinationRequired =
     serviceType === 'EXECUTIVE' && ['Full Day', 'Multi-Day', 'Road Show'].includes(String(form.tripType || ''))
       ? false
-      : !hideDestination;
+      : hideDestination
+        ? false
+        : destField?.required !== undefined
+          ? !!destField.required
+          : true;
 
   const handleOriginChange = useCallback(
     (addr: string, coords?: { lat: number; lng: number }) => {
@@ -1490,20 +1502,33 @@ function NewBookingInner() {
   const { hasModule, tenant } = usePermissions();
   const searchParams = useSearchParams() ?? new URLSearchParams();
   const router = useRouter();
+  const [catalog, setCatalog] = useState<BookingCatalogCategory[] | null>(null);
+  const touchedKeysRef = useRef<Set<string>>(new Set());
+
+  useEffect(() => {
+    let active = true;
+    void (async () => {
+      try {
+        const res = await fetch('/api/booking-portal/catalog', { cache: 'no-store' });
+        const d = await res.json().catch(() => null);
+        if (active && res.ok && d?.ok && Array.isArray(d.categories)) {
+          setCatalog(d.categories);
+        }
+      } catch {
+        // Fallback to built-in SERVICE_CARDS & SCHEMAS
+      }
+    })();
+    return () => { active = false; };
+  }, []);
 
   const visibleCards = useMemo(() => {
-    if (!tenant || !tenant.enabledModules || tenant.enabledModules.length === 0) {
-      return SERVICE_CARDS;
-    }
-    return SERVICE_CARDS.filter((c) => {
-      const requiredModule = SERVICE_MODULE_MAP[c.type];
-      return !requiredModule || hasModule(requiredModule);
-    });
-  }, [hasModule, tenant]);
+    const hasTenantModuleRestrictions = !!(tenant && tenant.enabledModules && tenant.enabledModules.length > 0);
+    return buildDynamicServiceCards(SERVICE_CARDS, catalog, hasModule, hasTenantModuleRestrictions);
+  }, [catalog, hasModule, tenant]);
 
-  const initialType = (searchParams.get('type') ?? '') as ServiceType | '';
+  const initialType = (searchParams.get('type') ?? '').trim().toUpperCase();
   const [step, setStep] = useState<1 | 2 | 3>(initialType ? 2 : 1);
-  const [serviceType, setServiceType] = useState<ServiceType | ''>(initialType);
+  const [serviceType, setServiceType] = useState<string>(initialType);
   const [form, setForm] = useState<FormData>(
     initialType && initialType in SCHEMAS ? getDefaultFormForService(initialType as ServiceType) : EMPTY_FORM
   );
@@ -1513,28 +1538,61 @@ function NewBookingInner() {
   const [showLiveAvailability, setShowLiveAvailability] = useState(false);
   const [uploadedDocs, setUploadedDocs] = useState<UploadedBookingDocument[]>([]);
 
-  const selectService = useCallback((type: ServiceType) => {
-    setServiceType(type);
-    setForm(getDefaultFormForService(type));
-    setUploadedDocs([]);
-    setShowLiveAvailability(false);
-    setError('');
-    setStep(2);
-  }, []);
+  const selectService = useCallback(
+    (type: string) => {
+      const cat = findCatalogCategoryForBookingType(catalog, type);
+      const baseDefaults = type in SCHEMAS ? getDefaultFormForService(type as ServiceType) : { ...EMPTY_FORM };
+      touchedKeysRef.current = new Set();
+      setServiceType(type);
+      setForm(mergeCatalogDefaults(type, baseDefaults, cat));
+      setUploadedDocs([]);
+      setShowLiveAvailability(false);
+      setError('');
+      setStep(2);
+    },
+    [catalog]
+  );
+
+  // When the live catalogue loads asynchronously after mount, apply tenant default values
+  // to any fields the user has not edited yet.
+  useEffect(() => {
+    if (!catalog || !serviceType) return;
+    const cat = findCatalogCategoryForBookingType(catalog, serviceType);
+    if (!cat || !cat.defaultValues || Object.keys(cat.defaultValues).length === 0) return;
+    const baseDefaults = serviceType in SCHEMAS ? getDefaultFormForService(serviceType as ServiceType) : { ...EMPTY_FORM };
+    const merged = mergeCatalogDefaults(serviceType, baseDefaults, cat);
+    setForm((prev) => {
+      const next = { ...prev };
+      let changed = false;
+      for (const [k, v] of Object.entries(merged)) {
+        if (touchedKeysRef.current.has(k)) continue;
+        if (cat.defaultValues[k] !== undefined || (serviceType === 'RENTAL' && k === 'renterAccountType' && cat.defaultValues.renterAccountType !== undefined)) {
+          if (next[k] !== v) {
+            next[k] = v;
+            changed = true;
+          }
+        }
+      }
+      return changed ? next : prev;
+    });
+  }, [catalog, serviceType]);
 
   useEffect(() => {
     if (visibleCards.length === 0) return;
     if (initialType && visibleCards.some((c) => c.type === initialType)) {
-      selectService(initialType as ServiceType);
-    } else if (visibleCards.length === 1) {
+      if (serviceType !== initialType || step !== 2) {
+        selectService(initialType);
+      }
+    } else if (visibleCards.length === 1 && step === 1) {
       selectService(visibleCards[0].type);
-    } else if (initialType && !visibleCards.some((c) => c.type === initialType)) {
+    } else if (initialType && catalog && !visibleCards.some((c) => c.type === initialType)) {
       setServiceType('');
       setStep(1);
     }
-  }, [initialType, visibleCards, selectService]);
+  }, [initialType, visibleCards, catalog, selectService, serviceType, step]);
 
   const onChange = useCallback((k: string, v: string | boolean | number) => {
+    touchedKeysRef.current.add(k);
     setForm((prev) => ({ ...prev, [k]: v }));
   }, []);
 
@@ -1704,9 +1762,36 @@ function NewBookingInner() {
   }, [serviceType, isPersonalRental, personalRentalEst, leasingEst, schoolBusEst]);
 
   const card = visibleCards.find((c) => c.type === serviceType) || SERVICE_CARDS.find((c) => c.type === serviceType);
-  const schema: SectionDef[] = serviceType ? SCHEMAS[serviceType as ServiceType] : [];
-  const primarySelector = serviceType ? DOMAIN_PRIMARY_SELECTORS[serviceType as ServiceType] : null;
-  const meta = serviceType ? SERVICE_META[serviceType as ServiceType] : null;
+  const activeCatalogCat = useMemo(
+    () => findCatalogCategoryForBookingType(catalog, serviceType),
+    [catalog, serviceType]
+  );
+  const isBuiltinService = !!serviceType && serviceType in SCHEMAS;
+  const schema: SectionDef[] = useMemo(
+    () =>
+      serviceType
+        ? resolveDynamicBookingSchema(
+            serviceType,
+            isBuiltinService ? SCHEMAS[serviceType as ServiceType] : undefined,
+            activeCatalogCat
+          )
+        : [],
+    [serviceType, isBuiltinService, activeCatalogCat]
+  );
+  const primarySelector = isBuiltinService ? DOMAIN_PRIMARY_SELECTORS[serviceType as ServiceType] : null;
+  const meta = useMemo(() => {
+    if (!serviceType) return null;
+    if (isBuiltinService) {
+      const base = SERVICE_META[serviceType as ServiceType];
+      return card ? { ...base, title: card.title, icon: card.icon } : base;
+    }
+    return {
+      title: card?.title || activeCatalogCat?.title || serviceType,
+      icon: card?.icon || activeCatalogCat?.icon || '🚐',
+      cta: `Submit ${card?.title || activeCatalogCat?.title || 'Booking'} Request`,
+      confirmNote: `Your ${(card?.title || serviceType).toLowerCase()} request has been logged and routed to operations.`,
+    };
+  }, [serviceType, isBuiltinService, card, activeCatalogCat]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -1724,7 +1809,7 @@ function NewBookingInner() {
 
     setLoading(true);
     try {
-      const { _ref, ...payload } = buildPayload(serviceType as ServiceType, form, uploadedDocs);
+      const { _ref, ...payload } = buildPayload(serviceType, form, uploadedDocs);
 
       const res = await fetch('/api/bookings', {
         method: 'POST',
@@ -1835,13 +1920,17 @@ function NewBookingInner() {
             {visibleCards.map((opt) => (
               <button
                 key={opt.type}
-                onClick={() => selectService(opt.type as ServiceType)}
+                onClick={() => selectService(opt.type)}
                 className="group relative bg-[var(--bg-surface)] border border-[var(--border-subtle)] hover:border-cyan-500/60 rounded-2xl p-6 text-left hover:shadow-md transition-all duration-200 hover:scale-[1.01] active:scale-100 flex flex-col justify-between space-y-4 shadow-sm"
               >
                 <div>
                   <div className="flex items-start justify-between mb-3">
                     <div className="w-12 h-12 rounded-2xl bg-[var(--bg-main)] border border-[var(--border-subtle)] flex items-center justify-center text-cyan-500 group-hover:scale-105 group-hover:border-cyan-500 transition-all">
-                      {getServiceVectorIcon(opt.type, 'w-6 h-6 text-cyan-500')}
+                      {opt.type in SCHEMAS ? (
+                        getServiceVectorIcon(opt.type, 'w-6 h-6 text-cyan-500')
+                      ) : (
+                        <span className="text-2xl leading-none">{opt.icon}</span>
+                      )}
                     </div>
                     <span className="text-[10px] font-mono font-bold bg-cyan-500/10 text-cyan-700 dark:text-cyan-300 border border-cyan-500/30 px-2.5 py-1 rounded-full tracking-wider">
                       {opt.badge}
@@ -1882,7 +1971,7 @@ function NewBookingInner() {
       {/* ══════════════════════════════════════════════════════════════
           Step 2 — Domain-Specific Form
       ══════════════════════════════════════════════════════════════ */}
-      {step === 2 && card && serviceType && primarySelector && (
+      {step === 2 && card && serviceType && (
         <div className="space-y-8">
           {/* Top Centered Capsule Navigation Pills */}
           <div className="flex justify-center">
@@ -1893,7 +1982,7 @@ function NewBookingInner() {
                   <button
                     key={opt.type}
                     type="button"
-                    onClick={() => selectService(opt.type as ServiceType)}
+                    onClick={() => selectService(opt.type)}
                     className={`px-6 py-2.5 rounded-full text-xs font-bold transition-all duration-200 whitespace-nowrap ${
                       isActive
                         ? 'bg-blue-600 text-white shadow-sm'
@@ -1911,7 +2000,8 @@ function NewBookingInner() {
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
               {/* ── LEFT COLUMN (Service-Specific Selector + Domain Schema + Relevant Widgets) ── */}
               <div className="lg:col-span-8 space-y-6">
-                {/* 1. Service-Specific Primary Selection Card */}
+                {/* 1. Service-Specific Primary Selection Card (built-in 6 domains) */}
+                {primarySelector && (
                 <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-2xl p-6 space-y-4 shadow-sm">
                   <div className="flex items-center justify-between gap-4">
                     <div>
@@ -2005,6 +2095,24 @@ function NewBookingInner() {
                       </div>
                     )}
                 </div>
+                )}
+
+                {!primarySelector && (
+                  <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-2xl p-5 flex items-center gap-4 shadow-sm">
+                    <div className="w-12 h-12 rounded-2xl bg-[var(--bg-main)] border border-[var(--border-subtle)] flex items-center justify-center text-2xl flex-shrink-0">
+                      {card.icon}
+                    </div>
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <h3 className="text-base font-bold text-[var(--text-main)]">{card.title}</h3>
+                        <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded-full bg-cyan-500/10 text-cyan-700 dark:text-cyan-300 border border-cyan-500/30">
+                          {card.badge}
+                        </span>
+                      </div>
+                      <p className="text-xs text-[var(--text-muted)] mt-0.5">{card.desc}</p>
+                    </div>
+                  </div>
+                )}
 
                 {/* Rent-a-Car UAE Driver Age Compliance Advisory */}
                 {serviceType === 'RENTAL' && driverAge !== null && driverAge < 25 && (
@@ -2516,9 +2624,21 @@ function NewBookingInner() {
                         )}
                       </>
                     )}
+
+                    {!isBuiltinService && (
+                      <>
+                        <SummaryRow label="Category" value={card.title} />
+                        {form.vehicleCategory && <SummaryRow label="Service / Vehicle" value={String(form.vehicleCategory)} truncate />}
+                        {form.startDate && <SummaryRow label="Service Date" value={String(form.startDate)} mono />}
+                        {form.pickupTime && <SummaryRow label="Time" value={String(form.pickupTime)} mono />}
+                        {form.origin && <SummaryRow label="Origin" value={String(form.origin)} truncate />}
+                        {form.destination && <SummaryRow label="Destination" value={String(form.destination)} truncate />}
+                      </>
+                    )}
                   </div>
 
-                  {/* Itemized Pricing Breakdown */}
+                  {/* Itemized Pricing Breakdown (shown for priced domains) */}
+                  {isBuiltinService && (
                   <div className="border-t border-b border-[var(--border-subtle)] py-3 space-y-2 text-xs font-mono">
                     <div className="flex justify-between text-[var(--text-main)]">
                       <span>
@@ -2556,10 +2676,15 @@ function NewBookingInner() {
                       </span>
                     </div>
                   </div>
+                  )}
 
                   {/* Domain-Appropriate Status / Cost Center Pill */}
                   <div className="flex items-center justify-center">
-                    {serviceType === 'SCHOOL_BUS' ? (
+                    {!isBuiltinService ? (
+                      <span className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full bg-cyan-500/15 border border-cyan-500/40 text-cyan-800 dark:text-cyan-300 text-xs font-semibold">
+                        {card.icon} {card.title} ({card.badge})
+                      </span>
+                    ) : serviceType === 'SCHOOL_BUS' ? (
                       <span className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full bg-amber-500/15 border border-amber-500/40 text-amber-800 dark:text-amber-300 text-xs font-semibold">
                         🛡️ RTA-Compliant Student Transport
                       </span>

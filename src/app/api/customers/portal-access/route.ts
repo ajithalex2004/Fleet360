@@ -6,7 +6,7 @@ export const dynamic = 'force-dynamic';
  * GET /api/customers/portal-access
  *   Every customer with its enabled portals (FSM, TRANSPORT), its Transport
  *   categories and portal user counts, plus the categories the tenant offers
- *   (Transport catalogue) — only those can be newly given to a customer.
+ *   (Transport catalogue, including custom categories) and their titles.
  * PUT /api/customers/portal-access
  *   Body: { customerId, portal: 'FSM' | 'TRANSPORT', enabled, categories? }
  *   categories (TRANSPORT only): the Transport categories the customer may use.
@@ -22,8 +22,8 @@ import { captureException } from '@/lib/sentry';
 import {
   PortalUserError, isCustomerPortal, listCustomerPortalSummaries, setCustomerPortalAccess,
 } from '@/lib/customer-portal/users';
-import { parseTransportCategories, TRANSPORT_CATEGORY_LABEL } from '@/lib/customer-portal/catalog';
-import { offeredCategories } from '@/lib/transport-catalog/store';
+import { categoryLabel, parseTenantCategories } from '@/lib/customer-portal/catalog';
+import { offeredCategories, tenantCategoryTitleMap } from '@/lib/transport-catalog/store';
 
 export const runtime = 'nodejs';
 
@@ -33,8 +33,18 @@ export async function GET(req: NextRequest) {
   const auth = authorizeServiceConfig(req);
   if (!auth.ok) return auth.res;
   try {
-    const [customers, offered] = await Promise.all([listCustomerPortalSummaries(auth.tenantId), offeredCategories(auth.tenantId)]);
-    return NextResponse.json({ ok: true, customers, offeredCategories: offered, canEdit: requireAdmin(auth).ok });
+    const [customers, offered, categoryLabels] = await Promise.all([
+      listCustomerPortalSummaries(auth.tenantId),
+      offeredCategories(auth.tenantId),
+      tenantCategoryTitleMap(auth.tenantId),
+    ]);
+    return NextResponse.json({
+      ok: true,
+      customers,
+      offeredCategories: offered,
+      categoryLabels,
+      canEdit: requireAdmin(auth).ok,
+    });
   } catch (err) {
     captureException(err, { context: 'customers.portal-access.list' });
     return NextResponse.json({ ok: false, error: 'Failed to load portal access' }, { status: 500 });
@@ -54,7 +64,7 @@ async function handlePUT(req: NextRequest) {
   if (!customerId || !isCustomerPortal(body.portal) || typeof body.enabled !== 'boolean') {
     return NextResponse.json({ ok: false, error: 'customerId, portal (FSM | TRANSPORT) and enabled are required' }, { status: 400 });
   }
-  const categories = body.categories === undefined ? undefined : parseTransportCategories(body.categories);
+  const categories = body.categories === undefined ? undefined : parseTenantCategories(body.categories);
   if (categories === null || (categories && body.portal !== 'TRANSPORT')) {
     return NextResponse.json(
       { ok: false, error: 'categories must be a list of Transport categories (Transport portal only)' }, { status: 400 },
@@ -62,8 +72,9 @@ async function handlePUT(req: NextRequest) {
   }
   try {
     await setCustomerPortalAccess(auth.tenantId, customerId, body.portal, body.enabled, auth.userId, categories);
+    const titleMap = categories ? await tenantCategoryTitleMap(auth.tenantId) : undefined;
     const catText = categories
-      ? ` (categories: ${categories.map((c) => TRANSPORT_CATEGORY_LABEL[c]).join(', ') || 'none'})` : '';
+      ? ` (categories: ${categories.map((c) => categoryLabel(c, titleMap)).join(', ') || 'none'})` : '';
     void logAudit({
       tenantId: auth.tenantId, userId: auth.userId, userRole: auth.role || undefined, entityType: 'CustomerPortalAccess',
       entityId: customerId, entityName: body.portal, action: 'UPDATE',

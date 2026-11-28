@@ -20,11 +20,11 @@ import {
   type DocumentUploadSlot,
 } from '@/components/booking/BookingDocumentDropzone';
 import type { RequestFormDef, RequestValues } from '@/lib/transport-catalog/form-schema';
-import { canRaiseRequests, type TransportCategory } from '@/lib/customer-portal/catalog';
+import { canRaiseRequests, type TransportCategoryCode } from '@/lib/customer-portal/catalog';
 import { usePortal } from '../../portal-shell';
 
 interface LoadedForm {
-  category: { category: TransportCategory; title: string; description: string; approvalRequired: boolean };
+  category: { category: TransportCategoryCode; title: string; description: string; approvalRequired: boolean };
   form: RequestFormDef;
   prefill: RequestValues;
 }
@@ -33,7 +33,7 @@ function NewTransportRequest() {
   const me = usePortal();
   const router = useRouter();
   const params = useSearchParams();
-  const category = params.get('category') as TransportCategory | null;
+  const category = params.get('category') as TransportCategoryCode | null;
   const [loaded, setLoaded] = useState<LoadedForm | null>(null);
   const [values, setValues] = useState<RequestValues>({});
   const [uploadedDocs, setUploadedDocs] = useState<UploadedBookingDocument[]>([]);

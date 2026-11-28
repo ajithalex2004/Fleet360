@@ -19,13 +19,13 @@ import {
   FormPanel, FormSection, FormField, FormAlert, FormFooter, TextInput, SelectInput, PrimaryButton, SecondaryButton,
 } from '@/components/ui/form-kit';
 import {
-  PORTAL_LABEL, PORTAL_ROLES, ROLE_LABEL, TRANSPORT_CATEGORIES, TRANSPORT_CATEGORY_LABEL,
-  type CustomerPortal, type PortalRole, type TransportCategory,
+  PORTAL_LABEL, PORTAL_ROLES, ROLE_LABEL, TRANSPORT_CATEGORIES, categoryLabel,
+  type CustomerPortal, type PortalRole, type TransportCategoryCode,
 } from '@/lib/customer-portal/catalog';
 
 interface CustomerRow {
   customerId: string; code: string | null; name: string; status: string | null;
-  portals: CustomerPortal[]; transportCategories: TransportCategory[]; activeUsers: number; invitedUsers: number;
+  portals: CustomerPortal[]; transportCategories: TransportCategoryCode[]; activeUsers: number; invitedUsers: number;
   rentalCustomer: { id: string; name: string } | null;
 }
 interface PortalAccount {
@@ -50,14 +50,15 @@ export default function CustomerPortalAccessPage() {
   const [err, setErr] = useState<string | null>(null);
   const [managing, setManaging] = useState<CustomerRow | null>(null);
   const [pickingCategories, setPickingCategories] = useState<CustomerRow | null>(null);
-  const [offered, setOffered] = useState<TransportCategory[]>([]);
+  const [offered, setOffered] = useState<TransportCategoryCode[]>([]);
+  const [categoryLabels, setCategoryLabels] = useState<Record<string, string>>({});
   const [linkingRental, setLinkingRental] = useState<CustomerRow | null>(null);
 
   const load = useCallback(async () => {
     const res = await fetch('/api/customers/portal-access', { cache: 'no-store' });
     const d = await res.json().catch(() => null);
     if (!res.ok || !d?.ok) { setErr(d?.error ?? 'Could not load customers'); return; }
-    setRows(d.customers); setCanEdit(!!d.canEdit); setOffered(d.offeredCategories ?? []);
+    setRows(d.customers); setCanEdit(!!d.canEdit); setOffered(d.offeredCategories ?? []); setCategoryLabels(d.categoryLabels ?? {});
   }, []);
   useEffect(() => { void load(); }, [load]);
 
@@ -100,7 +101,7 @@ export default function CustomerPortalAccessPage() {
             </label>
             {on && (c.transportCategories.length
               ? c.transportCategories.map((k) => (
-                  <span key={k} className="px-1.5 py-0.5 rounded-full border border-blue-500/30 bg-blue-500/10 text-[10px] font-semibold text-blue-600">{TRANSPORT_CATEGORY_LABEL[k]}</span>
+                  <span key={k} className="px-1.5 py-0.5 rounded-full border border-blue-500/30 bg-blue-500/10 text-[10px] font-semibold text-blue-600">{categoryLabel(k, categoryLabels)}</span>
                 ))
               : <span className="text-[10px] font-semibold text-amber-600">No categories</span>)}
             {on && canEdit && (
@@ -121,7 +122,7 @@ export default function CustomerPortalAccessPage() {
       key: 'actions', header: '', filter: false, sortable: false,
       render: (c) => <SecondaryButton icon={Users} onClick={(e) => { e.stopPropagation(); setManaging(c); }}>Manage users</SecondaryButton>,
     },
-  ], [canEdit, toggle]);
+  ], [canEdit, categoryLabels, toggle]);
 
   return (
     <div className="space-y-5 max-w-7xl">
@@ -140,22 +141,33 @@ export default function CustomerPortalAccessPage() {
           onSaved={() => { setLinkingRental(null); void load(); }} />
       )}
       {pickingCategories && (
-        <CategoriesDialog customer={pickingCategories} offered={offered} onClose={() => setPickingCategories(null)}
+        <CategoriesDialog customer={pickingCategories} offered={offered} categoryLabels={categoryLabels} onClose={() => setPickingCategories(null)}
           onSaved={() => { setPickingCategories(null); void load(); }} />
       )}
     </div>
   );
 }
 
-function CategoriesDialog({ customer, offered, onClose, onSaved }: {
-  customer: CustomerRow; offered: TransportCategory[]; onClose: () => void; onSaved: () => void;
+function CategoriesDialog({ customer, offered, categoryLabels, onClose, onSaved }: {
+  customer: CustomerRow; offered: TransportCategoryCode[]; categoryLabels: Record<string, string>; onClose: () => void; onSaved: () => void;
 }) {
-  // Categories the tenant offers, plus any the customer already has that are no longer offered.
-  const choices = TRANSPORT_CATEGORIES.filter((k) => offered.includes(k) || customer.transportCategories.includes(k));
-  const [picked, setPicked] = useState<TransportCategory[]>(customer.transportCategories);
+  // Categories the tenant offers (built-in + custom), plus any the customer already has that are no longer offered.
+  const choices = useMemo(() => {
+    const seen = new Set<string>();
+    const out: TransportCategoryCode[] = [];
+    for (const k of [...TRANSPORT_CATEGORIES, ...offered, ...customer.transportCategories]) {
+      if (seen.has(k)) continue;
+      if (offered.includes(k) || customer.transportCategories.includes(k)) {
+        seen.add(k);
+        out.push(k);
+      }
+    }
+    return out;
+  }, [offered, customer.transportCategories]);
+  const [picked, setPicked] = useState<TransportCategoryCode[]>(customer.transportCategories);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
-  const flip = (k: TransportCategory) => setPicked((p) => (p.includes(k) ? p.filter((x) => x !== k) : [...p, k]));
+  const flip = (k: TransportCategoryCode) => setPicked((p) => (p.includes(k) ? p.filter((x) => x !== k) : [...p, k]));
   const save = async () => {
     if (picked.length === 0) { setErr('Choose at least one category.'); return; }
     setBusy(true); setErr(null);
@@ -181,7 +193,7 @@ function CategoriesDialog({ customer, offered, onClose, onSaved }: {
             {choices.map((k) => (
               <label key={k} className="flex items-center gap-2 rounded-lg border border-[var(--border-subtle)] px-3 py-2 text-xs cursor-pointer hover:bg-[var(--bg-surface-hover)]">
                 <input type="checkbox" checked={picked.includes(k)} onChange={() => flip(k)} className="rounded border-[var(--border-subtle)] text-blue-600 focus:ring-0" />
-                <span className="font-semibold">{TRANSPORT_CATEGORY_LABEL[k]}</span>
+                <span className="font-semibold">{categoryLabel(k, categoryLabels)}</span>
                 {k === 'LOGISTICS' && <span className="text-[10px] text-[var(--text-muted)]">Shipper portal</span>}
                 {!offered.includes(k) && <span className="text-[10px] font-semibold text-amber-600">No longer offered</span>}
               </label>
