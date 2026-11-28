@@ -32,7 +32,6 @@ async function handlePATCH(req: NextRequest, { params }: RouteParams) {
   if (!authz.ok) {
     return NextResponse.json({ error: authz.error }, { status: authz.status });
   }
-  const { tenantId } = authz;
 
   const auth = authorizeServiceConfig(req);
   if (!auth.ok) return auth.res;
@@ -52,9 +51,19 @@ async function handlePATCH(req: NextRequest, { params }: RouteParams) {
     sets.push(`${col} = $${p}${cast}`); args.push(value); p++;
   };
 
-  if (typeof body.name === 'string')         setIf('name',        body.name.trim());
-  if (typeof body.description === 'string')  setIf('description', body.description);
-  if (typeof body.icon === 'string')         setIf('icon',        body.icon);
+  if (typeof body.name === 'string') {
+    const trimmedName = body.name.trim();
+    if (!trimmedName) {
+      return NextResponse.json({ ok: false, error: 'Name cannot be empty.' }, { status: 400 });
+    }
+    setIf('name', trimmedName);
+  }
+  if (typeof body.description === 'string' || body.description === null) {
+    setIf('description', body.description);
+  }
+  if (typeof body.icon === 'string' || body.icon === null) {
+    setIf('icon', typeof body.icon === 'string' ? (body.icon.trim() || null) : null);
+  }
   if (typeof body.tone === 'string' && (SERVICE_TONES as readonly string[]).includes(body.tone)) {
     setIf('tone', body.tone);
   }
@@ -102,7 +111,6 @@ async function handleDELETE(req: NextRequest, { params }: RouteParams) {
   if (!authz.ok) {
     return NextResponse.json({ error: authz.error }, { status: authz.status });
   }
-  const { tenantId } = authz;
 
   const auth = authorizeServiceConfig(req);
   if (!auth.ok) return auth.res;
