@@ -7,15 +7,33 @@ import { usePermissions } from '@/contexts/PermissionContext';
 
 function SessionFallback({ label }: { label: string }) {
   return (
-    <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-slate-800 border border-white/10">
-      <span className="w-2 h-2 rounded-full bg-slate-500" />
-      <span className="text-slate-400 text-xs">{label}</span>
+    <div
+      className="flex items-center gap-2 px-3 py-1.5 rounded-md border text-xs"
+      style={{
+        backgroundColor: 'var(--pf-btn-sec-bg, var(--bg-surface))',
+        borderColor: 'var(--pf-outline-variant, var(--border-subtle))',
+        color: 'var(--pf-on-surface-variant, var(--text-muted))',
+      }}
+    >
+      <span
+        className="w-2 h-2 rounded-full"
+        style={{ backgroundColor: 'var(--pf-outline, #6F7A6E)' }}
+      />
+      <span>{label}</span>
     </div>
   );
 }
 
 function SsrPlaceholder() {
-  return <div className="w-32 h-9 rounded-xl bg-slate-800/60 border border-white/10 animate-pulse" />;
+  return (
+    <div
+      className="w-28 h-9 rounded-md border animate-pulse"
+      style={{
+        backgroundColor: 'var(--pf-btn-sec-bg, var(--bg-surface))',
+        borderColor: 'var(--pf-outline-variant, var(--border-subtle))',
+      }}
+    />
+  );
 }
 
 export default function PlatformSessionSlot() {
@@ -33,7 +51,7 @@ export default function PlatformSessionSlot() {
   return (
     <Link
       href="/login?logout=true"
-      className="rounded-xl bg-blue-600/20 border border-blue-500/40 px-4 py-1.5 text-xs font-semibold text-blue-300 hover:bg-blue-600/30 hover:text-white transition-all"
+      className="pf-btn-secondary inline-flex items-center px-3 py-2 rounded-md text-[13px] font-semibold"
     >
       Sign In
     </Link>

@@ -1,0 +1,216 @@
+/*
+ * Scoped design tokens for /platform — Split Directory & Live Module Inspector.
+ * Implements the exact Light & Dark M3 emerald/forest palette from the approved
+ * Fleet360 Enterprise design specification, synced with html.light / html.dark
+ * toggled by ThemeProvider / ThemeToggle.
+ */
+
+.platform-shell {
+  /* Light Theme (default / html.light) */
+  --pf-primary: #00652C;
+  --pf-on-primary: #FFFFFF;
+  --pf-primary-container: #15803D;
+  --pf-on-primary-container: #D3FFD5;
+
+  --pf-secondary: #9B4500;
+  --pf-on-secondary: #FFFFFF;
+  --pf-secondary-container: rgba(253, 138, 66, 0.25);
+  --pf-on-secondary-container: #9B4500;
+
+  --pf-surface: #F6FBF2;
+  --pf-surface-lowest: #FFFFFF;
+  --pf-surface-low: #F0F5EC;
+  --pf-surface-container: #EAEFE6;
+  --pf-surface-high: #E4EAE1;
+  --pf-surface-highest: #DFE4DB;
+  --pf-surface-variant: #DAE6D7;
+
+  --pf-on-surface: #181D17;
+  --pf-on-surface-variant: #3F493F;
+  --pf-outline: #6F7A6E;
+  --pf-outline-variant: #BECABC;
+
+  /* Component surface roles (Light) */
+  --pf-header-bg: #FFFFFF;
+  --pf-card-bg: #FFFFFF;
+  --pf-search-bg: #F0F5EC;
+  --pf-search-focus-bg: #FFFFFF;
+  --pf-kbd-bg: #FFFFFF;
+  --pf-badge-bg: #DAE6D7;
+  --pf-pin-mid-icon-bg: #DAE6D7;
+  --pf-row-active-bg: rgba(218, 230, 215, 0.6);
+  --pf-row-hover-bg: #F0F5EC;
+  --pf-row-icon-idle-bg: #EAEFE6;
+  --pf-row-pill-active-bg: #FFFFFF;
+  --pf-row-pill-idle-bg: #F0F5EC;
+  --pf-divider: #EAEFE6;
+  --pf-btn-sec-bg: #FFFFFF;
+  --pf-btn-sec-hover-bg: #F0F5EC;
+
+  /* High-contrast Inspector Header (Light = dark inverse charcoal) */
+  --pf-inspector-header-bg: #2C322C;
+  --pf-inspector-header-border: transparent;
+  --pf-inspector-header-cat: #79DB8D;
+  --pf-inspector-header-title: #EDF2E9;
+  --pf-inspector-header-summary: rgba(237, 242, 233, 0.9);
+  --pf-inspector-header-icon-bg: #15803D;
+  --pf-inspector-header-icon-fg: #D3FFD5;
+
+  /* Inspector Body Metrics & Chips (Light) */
+  --pf-metric-lead-bg: #DAE6D7;
+  --pf-metric-lead-border: rgba(0, 101, 44, 0.3);
+  --pf-metric-bg: #F0F5EC;
+  --pf-tag-bg: #F0F5EC;
+  --pf-primary-hover-bg: #15803D;
+  --pf-primary-hover-fg: #FFFFFF;
+
+  background-color: var(--pf-surface);
+  color: var(--pf-on-surface);
+  font-family: var(--font-pf-body), 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
+}
+
+html.dark .platform-shell {
+  /* Dark Theme (html.dark) */
+  --pf-primary: #79DB8D;
+  --pf-on-primary: #003916;
+  --pf-primary-container: #15803D;
+  --pf-on-primary-container: #D3FFD5;
+
+  --pf-secondary: #FFB68E;
+  --pf-on-secondary: #532200;
+  --pf-secondary-container: #AB4C00;
+  --pf-on-secondary-container: #FFE2D5;
+
+  --pf-surface: #0F1510;
+  --pf-surface-lowest: #0A0F0A;
+  --pf-surface-low: #181D17;
+  --pf-surface-container: #1B211B;
+  --pf-surface-high: #262B26;
+  --pf-surface-highest: #313630;
+  --pf-surface-variant: #3F493F;
+
+  --pf-on-surface: #DFE4DB;
+  --pf-on-surface-variant: #BECABC;
+  --pf-outline: #889487;
+  --pf-outline-variant: #3F493F;
+
+  /* Component surface roles (Dark) */
+  --pf-header-bg: #181D17;
+  --pf-card-bg: #181D17;
+  --pf-search-bg: #0A0F0A;
+  --pf-search-focus-bg: #0A0F0A;
+  --pf-kbd-bg: #262B26;
+  --pf-badge-bg: #262B26;
+  --pf-pin-mid-icon-bg: #313630;
+  --pf-row-active-bg: #262B26;
+  --pf-row-hover-bg: #1B211B;
+  --pf-row-icon-idle-bg: #313630;
+  --pf-row-pill-active-bg: #0A0F0A;
+  --pf-row-pill-idle-bg: #1B211B;
+  --pf-divider: #262B26;
+  --pf-btn-sec-bg: #1B211B;
+  --pf-btn-sec-hover-bg: #262B26;
+
+  /* High-contrast Inspector Header (Dark = elevated surface-container-high) */
+  --pf-inspector-header-bg: #262B26;
+  --pf-inspector-header-border: #3F493F;
+  --pf-inspector-header-cat: #79DB8D;
+  --pf-inspector-header-title: #DFE4DB;
+  --pf-inspector-header-summary: #BECABC;
+  --pf-inspector-header-icon-bg: #79DB8D;
+  --pf-inspector-header-icon-fg: #003916;
+
+  /* Inspector Body Metrics & Chips (Dark) */
+  --pf-metric-lead-bg: #313630;
+  --pf-metric-lead-border: rgba(121, 219, 141, 0.5);
+  --pf-metric-bg: #1B211B;
+  --pf-tag-bg: #1B211B;
+  --pf-primary-hover-bg: #15803D;
+  --pf-primary-hover-fg: #D3FFD5;
+}
+
+.platform-shell .pf-font-headline {
+  font-family: var(--font-pf-headline), 'Archivo', system-ui, sans-serif;
+}
+
+.platform-shell .pf-font-mono {
+  font-family: var(--font-pf-mono), 'Red Hat Mono', ui-monospace, SFMono-Regular, monospace;
+}
+
+html[dir='rtl'] .platform-shell,
+html[lang='ar'] .platform-shell,
+html[dir='rtl'] .platform-shell .pf-font-headline {
+  font-family: 'Cairo', var(--font-pf-body), system-ui, sans-serif;
+}
+
+.pf-btn-primary {
+  background-color: var(--pf-primary);
+  color: var(--pf-on-primary);
+  transition: background-color 100ms ease-out, color 100ms ease-out;
+}
+.pf-btn-primary:hover {
+  background-color: var(--pf-primary-hover-bg);
+  color: var(--pf-primary-hover-fg);
+}
+
+.pf-btn-secondary {
+  background-color: var(--pf-btn-sec-bg);
+  color: var(--pf-on-surface);
+  border: 1px solid var(--pf-outline-variant);
+  transition: background-color 100ms ease-out, border-color 100ms ease-out;
+}
+.pf-btn-secondary:hover {
+  background-color: var(--pf-btn-sec-hover-bg);
+}
+
+.pf-pin-card {
+  background-color: var(--pf-card-bg);
+  border: 1px solid var(--pf-outline-variant);
+  transition: border-color 100ms ease-out, background-color 100ms ease-out;
+}
+.pf-pin-card:hover,
+.pf-pin-card[data-active='true'] {
+  border-color: var(--pf-primary);
+}
+
+.pf-search-form {
+  background-color: var(--pf-search-bg);
+  border: 1px solid var(--pf-outline-variant);
+  transition: border-color 100ms ease-out, background-color 100ms ease-out;
+}
+.pf-search-form:focus-within {
+  border-color: var(--pf-primary);
+  background-color: var(--pf-search-focus-bg);
+}
+
+.pf-chip {
+  background-color: var(--pf-card-bg);
+  border: 1px solid var(--pf-outline-variant);
+  color: var(--pf-on-surface-variant);
+  transition: border-color 100ms ease-out, background-color 100ms ease-out, color 100ms ease-out;
+}
+.pf-chip:hover {
+  border-color: var(--pf-primary);
+}
+.pf-chip[data-active='true'] {
+  background-color: var(--pf-primary);
+  border-color: var(--pf-primary);
+  color: var(--pf-on-primary);
+}
+
+.pf-row {
+  background-color: transparent;
+  transition: background-color 100ms ease-out;
+}
+.pf-row:hover {
+  background-color: var(--pf-row-hover-bg);
+}
+.pf-row[data-active='true'] {
+  background-color: var(--pf-row-active-bg);
+}
+
+.platform-shell #split-search::placeholder {
+  color: var(--pf-on-surface-variant);
+  opacity: 0.85;
+}
+
