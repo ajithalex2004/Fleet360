@@ -14,6 +14,7 @@
  */
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import Link from 'next/link';
 import {
   Truck,
   Eye,
@@ -89,6 +90,7 @@ interface TenantCategory {
   accent: CategoryAccent;
   moduleKey: string | null;
   customModuleKey: string | null;
+  moduleEnabled: boolean;
   menu: string[];
   form: RequestFormDef;
   effectiveForm: RequestFormDef;
@@ -106,6 +108,8 @@ const ICON_CHOICES = ['🚐', '🚗', '🚌', '🚛', '⭐', '🏫', '🚑', '�
 export default function TransportCatalogPage() {
   const [cats, setCats] = useState<TenantCategory[] | null>(null);
   const [canEdit, setCanEdit] = useState(false);
+  const [transportPortalEnabled, setTransportPortalEnabled] = useState(true);
+  const [showDisabledModules, setShowDisabledModules] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const [selected, setSelected] = useState<string | null>(null);
   const [showCreateModal, setShowCreateModal] = useState(false);
@@ -117,13 +121,14 @@ export default function TransportCatalogPage() {
       setErr(d?.error ?? 'Could not load the catalogue');
       return;
     }
-    setCats(d.categories);
+    const list: TenantCategory[] = d.categories ?? [];
+    setCats(list);
     setCanEdit(!!d.canEdit);
-    setSelected((s) =>
-      s && d.categories.some((c: TenantCategory) => c.category === s)
-        ? s
-        : d.categories[0]?.category ?? null
-    );
+    if (typeof d.transportPortalEnabled === 'boolean') setTransportPortalEnabled(d.transportPortalEnabled);
+    setSelected((s) => {
+      if (s && list.some((c) => c.category === s)) return s;
+      return list.find((c) => c.moduleEnabled !== false)?.category ?? list[0]?.category ?? null;
+    });
   }, []);
 
   useEffect(() => {
@@ -172,8 +177,19 @@ export default function TransportCatalogPage() {
     });
   }, []);
 
+  const disabledModuleCount = useMemo(
+    () => (cats ?? []).filter((c) => c.moduleEnabled === false).length,
+    [cats],
+  );
+  const visibleCats = useMemo(() => {
+    if (!cats) return null;
+    if (showDisabledModules) return cats;
+    const enabledOnly = cats.filter((c) => c.moduleEnabled !== false);
+    return enabledOnly.length > 0 ? enabledOnly : cats;
+  }, [cats, showDisabledModules]);
+
   const current = cats?.find((c) => c.category === selected) ?? null;
-  const offered = cats?.filter((c) => c.enabled).length ?? 0;
+  const offered = cats?.filter((c) => c.enabled && c.moduleEnabled !== false).length ?? 0;
 
   return (
     <div className="space-y-5 max-w-7xl">
@@ -192,10 +208,17 @@ export default function TransportCatalogPage() {
       />
 
       {err && <FormAlert>{err}</FormAlert>}
+      {!transportPortalEnabled && cats && (
+        <FormAlert tone="warning">
+          The <strong>Transport Services Customer Portal</strong> is currently disabled for this tenant in{' '}
+          <Link href="/admin/tenants" className="underline font-semibold">Admin → Tenants → Modules</Link>.
+          You can still customize forms for the Internal Booking Portal, or ask a platform admin to enable Transport Services for customers.
+        </FormAlert>
+      )}
       {!canEdit && cats && (
         <FormAlert tone="info">View only. A tenant admin can edit categories, custom fields, and defaults.</FormAlert>
       )}
-      {cats && offered === 0 && (
+      {cats && transportPortalEnabled && offered === 0 && (
         <FormAlert tone="warning">
           No Transport category is offered to external customers yet. Turn on the ones you provide for Customer Portal;
           Booking Portal visibility can be toggled independently on each category.
@@ -204,12 +227,14 @@ export default function TransportCatalogPage() {
 
       <div className="grid grid-cols-1 lg:grid-cols-[21rem_minmax(0,1fr)] gap-4 items-start">
         <div className="space-y-2">
-          {!cats && <p className="text-sm text-[var(--text-muted)]">Loading…</p>}
-          {cats?.map((c) => {
+          {!visibleCats && <p className="text-sm text-[var(--text-muted)]">Loading…</p>}
+          {visibleCats?.map((c) => {
             const overrideCount = Object.keys(c.fieldOverrides).length;
             const customFieldCount = c.customFormConfig.fields?.length ?? 0;
             const customSectionCount = c.customFormConfig.sections?.length ?? 0;
             const defaultCount = Object.keys(c.defaultValues).length;
+            const lockedByModule = c.moduleEnabled === false;
+            const offerDisabled = !canEdit || (!c.enabled && (lockedByModule || !transportPortalEnabled));
             return (
               <div
                 key={c.category}
@@ -223,7 +248,7 @@ export default function TransportCatalogPage() {
                   c.category === selected
                     ? 'border-blue-500/50 bg-blue-500/10'
                     : 'border-[var(--border-subtle)] bg-[var(--bg-surface)] hover:bg-[var(--bg-surface-hover)]'
-                }`}
+                } ${lockedByModule ? 'opacity-70' : ''}`}
               >
                 <div className="flex items-start justify-between gap-2">
                   <div className="min-w-0 flex items-start gap-2">
@@ -236,18 +261,23 @@ export default function TransportCatalogPage() {
                             Custom
                           </span>
                         )}
+                        {lockedByModule && (
+                          <span className="px-1.5 py-0.2 rounded-full bg-amber-500/15 border border-amber-500/30 text-[9px] font-bold text-amber-700 dark:text-amber-300">
+                            Module off
+                          </span>
+                        )}
                       </div>
                       <p className="text-[11px] text-[var(--text-muted)] line-clamp-1">{c.description}</p>
                     </div>
                   </div>
                   <label
-                    className="inline-flex items-center gap-1.5 text-[11px] font-semibold cursor-pointer flex-shrink-0"
+                    className={`inline-flex items-center gap-1.5 text-[11px] font-semibold flex-shrink-0 ${offerDisabled ? 'cursor-not-allowed opacity-60' : 'cursor-pointer'}`}
                     onClick={(e) => e.stopPropagation()}
                   >
                     <input
                       type="checkbox"
                       checked={c.enabled}
-                      disabled={!canEdit}
+                      disabled={offerDisabled}
                       aria-label={`Offer ${c.title}`}
                       onChange={() => void save(c.category, { enabled: !c.enabled })}
                       className="rounded border-[var(--border-subtle)] text-blue-600 focus:ring-0"
@@ -276,6 +306,17 @@ export default function TransportCatalogPage() {
               </div>
             );
           })}
+          {disabledModuleCount > 0 && (
+            <button
+              type="button"
+              onClick={() => setShowDisabledModules((v) => !v)}
+              className="w-full rounded-xl border border-dashed border-[var(--border-subtle)] px-3 py-2 text-[11px] font-semibold text-[var(--text-muted)] hover:text-[var(--text-main)] hover:bg-[var(--bg-surface-hover)] transition-colors"
+            >
+              {showDisabledModules
+                ? `Hide ${disabledModuleCount} unavailable Admin module categor${disabledModuleCount === 1 ? 'y' : 'ies'}`
+                : `Show ${disabledModuleCount} categor${disabledModuleCount === 1 ? 'y' : 'ies'} gated by disabled Admin modules`}
+            </button>
+          )}
         </div>
 
         {current && (
@@ -283,6 +324,7 @@ export default function TransportCatalogPage() {
             key={current.category}
             cat={current}
             canEdit={canEdit}
+            transportPortalEnabled={transportPortalEnabled}
             onSave={save}
             onDeleteCustom={handleDeleteCustom}
           />
@@ -306,11 +348,13 @@ export default function TransportCatalogPage() {
 function CategoryEditor({
   cat,
   canEdit,
+  transportPortalEnabled,
   onSave,
   onDeleteCustom,
 }: {
   cat: TenantCategory;
   canEdit: boolean;
+  transportPortalEnabled: boolean;
   onSave: (c: string, patch: Record<string, unknown>) => Promise<boolean>;
   onDeleteCustom: (c: string, title: string) => Promise<void>;
 }) {
@@ -554,8 +598,14 @@ function CategoryEditor({
           <CheckboxField
             label="Offer in Customer Portal"
             checked={cat.enabled}
-            disabled={!canEdit}
-            hint="Only offered categories can be assigned to customers in Portal Access"
+            disabled={!canEdit || (!cat.enabled && (!transportPortalEnabled || cat.moduleEnabled === false))}
+            hint={
+              !transportPortalEnabled
+                ? 'Transport Services Customer Portal is disabled in Admin → Tenants → Modules'
+                : cat.moduleEnabled === false
+                  ? `Module "${cat.moduleKey}" is disabled in Admin → Tenants → Modules (enable it or switch Linked Module Gate to All Staff)`
+                  : 'Only offered categories can be assigned to customers in Portal Access'
+            }
             onChange={(v) => void onSave(cat.category, { enabled: v })}
           />
           <CheckboxField

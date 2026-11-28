@@ -23,6 +23,7 @@ import {
   PortalUserError, isCustomerPortal, listCustomerPortalSummaries, setCustomerPortalAccess,
 } from '@/lib/customer-portal/users';
 import { categoryLabel, parseTenantCategories } from '@/lib/customer-portal/catalog';
+import { getTenantPortalEntitlements } from '@/lib/customer-portal/tenant-entitlements';
 import { offeredCategories, tenantCategoryTitleMap } from '@/lib/transport-catalog/store';
 
 export const runtime = 'nodejs';
@@ -33,16 +34,19 @@ export async function GET(req: NextRequest) {
   const auth = authorizeServiceConfig(req);
   if (!auth.ok) return auth.res;
   try {
-    const [customers, offered, categoryLabels] = await Promise.all([
+    const [customers, offered, categoryLabels, entitlements] = await Promise.all([
       listCustomerPortalSummaries(auth.tenantId),
       offeredCategories(auth.tenantId),
       tenantCategoryTitleMap(auth.tenantId),
+      getTenantPortalEntitlements(auth.tenantId),
     ]);
     return NextResponse.json({
       ok: true,
       customers,
       offeredCategories: offered,
       categoryLabels,
+      enabledPortals: entitlements.enabledPortals,
+      portalEntitlements: entitlements.portals,
       canEdit: requireAdmin(auth).ok,
     });
   } catch (err) {

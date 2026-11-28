@@ -18,6 +18,11 @@ import {
   type TransportCategoryCode,
 } from '@/lib/customer-portal/catalog';
 import {
+  getTenantPortalEntitlements,
+  isCategoryAllowedByTenantModules,
+  type TenantPortalEntitlements,
+} from '@/lib/customer-portal/tenant-entitlements';
+import {
   CATEGORY_ACCENTS,
   VALID_MODULE_KEYS,
   resolveBookingServiceType,
@@ -53,6 +58,8 @@ export interface TenantCategory extends CategoryDefinition {
   moduleKey: string | null;
   /** Raw stored override (`null` = inherit built-in SERVICE_MODULE_MAP; `''` = explicitly unlocked). */
   customModuleKey: string | null;
+  /** True when the tenant's Admin module selection includes `moduleKey` (or `moduleKey` is null / unrestricted). */
+  moduleEnabled: boolean;
   /** Offered in external Customer Portal. */
   enabled: boolean;
   /** Shown in internal Booking Portal (/booking-portal & /booking-portal/new). */
@@ -136,7 +143,11 @@ function baseDefinitionFor(category: string, row: Row | undefined): CategoryDefi
   };
 }
 
-function toTenantCategory(category: string, row: Row | undefined): TenantCategory {
+function toTenantCategory(
+  category: string,
+  row: Row | undefined,
+  entitlements?: TenantPortalEntitlements,
+): TenantCategory {
   const builtin = isTransportCategory(category);
   const def = baseDefinitionFor(category, row);
   const visual = builtin ? BUILTIN_VISUAL_DEFAULTS[category] : null;
@@ -147,6 +158,10 @@ function toTenantCategory(category: string, row: Row | undefined): TenantCategor
   const accentRaw = row?.accent ?? visual?.accent ?? 'blue';
   const accent = (VALID_ACCENTS.has(accentRaw) ? accentRaw : 'blue') as CategoryAccent;
   const customModuleKey = row?.module_key !== undefined && row?.module_key !== null ? row.module_key : null;
+  const resolvedModuleKey = resolveRequiredModule(category, customModuleKey);
+  const moduleEnabled = entitlements
+    ? isCategoryAllowedByTenantModules(resolvedModuleKey, entitlements.enabledModules, entitlements.hasModuleRestrictions)
+    : true;
   const bookingPortalEnabled =
     typeof row?.booking_portal_enabled === 'boolean'
       ? row.booking_portal_enabled
@@ -162,8 +177,9 @@ function toTenantCategory(category: string, row: Row | undefined): TenantCategor
     icon: row?.icon?.trim() || visual?.icon || '🚐',
     badge: row?.badge?.trim() || visual?.badge || category.slice(0, 12),
     accent,
-    moduleKey: resolveRequiredModule(category, customModuleKey),
+    moduleKey: resolvedModuleKey,
     customModuleKey,
+    moduleEnabled,
     enabled: !!row?.enabled,
     bookingPortalEnabled,
     approvalRequired: !!row?.approval_required,
@@ -178,25 +194,42 @@ function toTenantCategory(category: string, row: Row | undefined): TenantCategor
 
 /** All built-in categories plus any tenant-defined custom categories. */
 export async function getTenantCatalog(tenantId: string): Promise<TenantCategory[]> {
-  const rowsList = await withTenantRls(prisma, tenantId, (tx) => rowsListFor(tx, tenantId));
+  const [rowsList, entitlements] = await withTenantRls(prisma, tenantId, async (tx) =>
+    Promise.all([rowsListFor(tx, tenantId), getTenantPortalEntitlements(tenantId, tx)]),
+  );
   const byCode = new Map(rowsList.map((r) => [r.category, r]));
-  const builtIns = TRANSPORT_CATEGORIES.map((c) => toTenantCategory(c, byCode.get(c)));
+  const builtIns = TRANSPORT_CATEGORIES.map((c) => toTenantCategory(c, byCode.get(c), entitlements));
   const customs = rowsList
     .filter((r) => !isTransportCategory(r.category))
-    .map((r) => toTenantCategory(r.category, r));
+    .map((r) => toTenantCategory(r.category, r, entitlements));
   return [...builtIns, ...customs];
 }
 
-/** Categories the tenant offers to Customer Portal customers (built-in + custom). */
+/** Categories the tenant offers to Customer Portal customers (built-in + custom, gated by Admin modules). */
 export async function offeredCategories(tenantId: string, tx?: TxClient): Promise<string[]> {
-  const run = (t: TxClient) => rowsListFor(t, tenantId);
-  const rowsList = tx ? await run(tx) : await withTenantRls(prisma, tenantId, run);
-  const byCode = new Map(rowsList.map((r) => [r.category, r]));
-  const builtIns = TRANSPORT_CATEGORIES.filter((c) => byCode.get(c)?.enabled);
-  const customs = rowsList
-    .filter((r) => !isTransportCategory(r.category) && r.enabled)
-    .map((r) => r.category);
-  return [...builtIns, ...customs];
+  const run = async (t: TxClient) => {
+    const [rowsList, entitlements] = await Promise.all([
+      rowsListFor(t, tenantId),
+      getTenantPortalEntitlements(tenantId, t),
+    ]);
+    if (!entitlements.portals.TRANSPORT.enabled) return [] as string[];
+    const byCode = new Map(rowsList.map((r) => [r.category, r]));
+    const allowedByMod = (code: string, row: Row | undefined) =>
+      isCategoryAllowedByTenantModules(
+        resolveRequiredModule(code, row?.module_key ?? null),
+        entitlements.enabledModules,
+        entitlements.hasModuleRestrictions,
+      );
+    const builtIns = TRANSPORT_CATEGORIES.filter((c) => {
+      const row = byCode.get(c);
+      return !!row?.enabled && allowedByMod(c, row);
+    });
+    const customs = rowsList
+      .filter((r) => !isTransportCategory(r.category) && r.enabled && allowedByMod(r.category, r))
+      .map((r) => r.category);
+    return [...builtIns, ...customs];
+  };
+  return tx ? run(tx) : withTenantRls(prisma, tenantId, run);
 }
 
 /** Lookup map of category code → display title for both built-in and tenant custom categories. */
@@ -217,12 +250,14 @@ export async function tenantCategoryTitleMap(tenantId: string, tx?: TxClient): P
 /** One category for this tenant (built-in or custom). */
 export async function getTenantCategory(tenantId: string, category: string): Promise<TenantCategory> {
   if (!isValidCategoryCode(category)) throw new CatalogError('Unknown Transport category.', 404);
-  const rows = await withTenantRls(prisma, tenantId, (tx) => rowsFor(tx, tenantId));
+  const [rows, entitlements] = await withTenantRls(prisma, tenantId, async (tx) =>
+    Promise.all([rowsFor(tx, tenantId), getTenantPortalEntitlements(tenantId, tx)]),
+  );
   const row = rows.get(category);
   if (!isTransportCategory(category) && !row) {
     throw new CatalogError('Unknown Transport category.', 404);
   }
-  return toTenantCategory(category, row);
+  return toTenantCategory(category, row, entitlements);
 }
 
 function parseModuleKeyPatch(raw: unknown): { set: boolean; value: string | null } {
@@ -272,7 +307,9 @@ export async function updateTenantCategory(
 ): Promise<TenantCategory> {
   if (!isValidCategoryCode(category)) throw new CatalogError('Unknown Transport category.');
 
-  const existing = await withTenantRls(prisma, tenantId, (tx) => rowsFor(tx, tenantId));
+  const [existing, entitlements] = await withTenantRls(prisma, tenantId, async (tx) =>
+    Promise.all([rowsFor(tx, tenantId), getTenantPortalEntitlements(tenantId, tx)]),
+  );
   const curRow = existing.get(category);
   const builtin = isTransportCategory(category);
   if (!builtin && !curRow) throw new CatalogError('Unknown Transport category.', 404);
@@ -282,6 +319,23 @@ export async function updateTenantCategory(
   const bookingPortalEnabled = typeof patch.bookingPortalEnabled === 'boolean' ? patch.bookingPortalEnabled : null;
   const approval = typeof patch.approvalRequired === 'boolean' ? patch.approvalRequired : null;
   const moduleKeyPatch = parseModuleKeyPatch(patch.moduleKey);
+
+  if (enabled === true) {
+    if (!entitlements.portals.TRANSPORT.enabled) {
+      throw new CatalogError(
+        'Transport Services Customer Portal is disabled for this tenant in Admin → Tenants → Modules.',
+        403,
+      );
+    }
+    const nextStoredModule = moduleKeyPatch.set ? moduleKeyPatch.value : (curRow?.module_key ?? null);
+    const resolvedMod = resolveRequiredModule(category, nextStoredModule);
+    if (!isCategoryAllowedByTenantModules(resolvedMod, entitlements.enabledModules, entitlements.hasModuleRestrictions)) {
+      throw new CatalogError(
+        `Enable the "${resolvedMod}" module in Admin → Tenants → Modules (or set Linked Module Gate to All Staff) before offering this category to customers.`,
+        403,
+      );
+    }
+  }
   const accent = parseAccentPatch(patch.accent);
   const title = typeof patch.title === 'string' && patch.title.trim() ? patch.title.trim().slice(0, 60) : null;
   const description = typeof patch.description === 'string' ? patch.description.trim().slice(0, 200) : null;
@@ -385,7 +439,7 @@ export async function updateTenantCategory(
     );
     return rowsFor(tx, tenantId);
   });
-  return toTenantCategory(category, rows.get(category));
+  return toTenantCategory(category, rows.get(category), entitlements);
 }
 
 export interface CreateCustomCategoryInput {
@@ -443,8 +497,11 @@ export async function createCustomTenantCategory(
 
   const customFormConfig: CustomFormConfig = { baseTemplate };
 
-  const rows = await withTenantRls(prisma, tenantId, async (tx) => {
-    const existing = await rowsFor(tx, tenantId);
+  const [rows, entitlements] = await withTenantRls(prisma, tenantId, async (tx) => {
+    const [existing, ent] = await Promise.all([
+      rowsFor(tx, tenantId),
+      getTenantPortalEntitlements(tenantId, tx),
+    ]);
     if (existing.has(code)) {
       throw new CatalogError(`Category "${code}" already exists.`, 409);
     }
@@ -472,10 +529,10 @@ export async function createCustomTenantCategory(
       maxSort + 10,
       JSON.stringify(customFormConfig),
     );
-    return rowsFor(tx, tenantId);
+    return [await rowsFor(tx, tenantId), ent] as const;
   });
 
-  return toTenantCategory(code, rows.get(code));
+  return toTenantCategory(code, rows.get(code), entitlements);
 }
 
 /** Deletes a tenant-defined custom category (built-in categories cannot be deleted). */
@@ -504,22 +561,32 @@ export async function deleteCustomTenantCategory(tenantId: string, category: unk
  */
 export async function customerTransportCategories(tenantId: string, customerId: string): Promise<TenantCategory[]> {
   return withTenantRls(prisma, tenantId, async (tx) => {
-    const [access] = await tx.$queryRawUnsafe<Array<{ categories: string[] }>>(
-      `SELECT categories FROM customer_portal_access
-        WHERE tenant_id = $1 AND customer_id = $2 AND portal = 'TRANSPORT'`,
-      tenantId,
-      customerId,
-    );
-    if (!access) return [];
-    const rowsList = await rowsListFor(tx, tenantId);
+    const [accessRows, rowsList, entitlements] = await Promise.all([
+      tx.$queryRawUnsafe<Array<{ categories: string[] }>>(
+        `SELECT categories FROM customer_portal_access
+          WHERE tenant_id = $1 AND customer_id = $2 AND portal = 'TRANSPORT'`,
+        tenantId,
+        customerId,
+      ),
+      rowsListFor(tx, tenantId),
+      getTenantPortalEntitlements(tenantId, tx),
+    ]);
+    const access = accessRows[0];
+    if (!access || !entitlements.portals.TRANSPORT.enabled) return [];
     const byCode = new Map(rowsList.map((r) => [r.category, r]));
     const allowedSet = new Set(access.categories);
+    const allowedByMod = (code: string, row: Row | undefined) =>
+      isCategoryAllowedByTenantModules(
+        resolveRequiredModule(code, row?.module_key ?? null),
+        entitlements.enabledModules,
+        entitlements.hasModuleRestrictions,
+      );
     const builtIns = TRANSPORT_CATEGORIES
-      .filter((c) => allowedSet.has(c) && byCode.get(c)?.enabled)
-      .map((c) => toTenantCategory(c, byCode.get(c)));
+      .filter((c) => allowedSet.has(c) && byCode.get(c)?.enabled && allowedByMod(c, byCode.get(c)))
+      .map((c) => toTenantCategory(c, byCode.get(c), entitlements));
     const customs = rowsList
-      .filter((r) => !isTransportCategory(r.category) && allowedSet.has(r.category) && r.enabled)
-      .map((r) => toTenantCategory(r.category, r));
+      .filter((r) => !isTransportCategory(r.category) && allowedSet.has(r.category) && r.enabled && allowedByMod(r.category, r))
+      .map((r) => toTenantCategory(r.category, r, entitlements));
     return [...builtIns, ...customs];
   });
 }

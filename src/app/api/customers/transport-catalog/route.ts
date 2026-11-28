@@ -28,6 +28,7 @@ import { withAuditedAction } from '@/lib/audited-action';
 import { logAudit } from '@/lib/audit';
 import { captureException } from '@/lib/sentry';
 import { isValidCategoryCode } from '@/lib/customer-portal/catalog';
+import { getTenantPortalEntitlements } from '@/lib/customer-portal/tenant-entitlements';
 import {
   CatalogError,
   createCustomTenantCategory,
@@ -46,8 +47,19 @@ export async function GET(req: NextRequest) {
   const auth = authorizeServiceConfig(req);
   if (!auth.ok) return auth.res;
   try {
-    const categories = await getTenantCatalog(auth.tenantId);
-    return NextResponse.json({ ok: true, categories, canEdit: requireAdmin(auth).ok });
+    const [categories, entitlements] = await Promise.all([
+      getTenantCatalog(auth.tenantId),
+      getTenantPortalEntitlements(auth.tenantId),
+    ]);
+    return NextResponse.json({
+      ok: true,
+      categories,
+      transportPortalEnabled: entitlements.portals.TRANSPORT.enabled,
+      portalEntitlements: entitlements.portals,
+      enabledModules: entitlements.enabledModules,
+      hasModuleRestrictions: entitlements.hasModuleRestrictions,
+      canEdit: requireAdmin(auth).ok,
+    });
   } catch (err) {
     captureException(err, { context: 'customers.transport-catalog.list' });
     return NextResponse.json({ ok: false, error: 'Failed to load the Transport catalogue' }, { status: 500 });
