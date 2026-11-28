@@ -1,580 +1,154 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import ThemeToggle from '@/components/ThemeToggle';
+import { useTheme } from '@/components/ThemeProvider';
 import PlatformSessionSlot from './PlatformSessionSlot';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { usePermissions } from '@/contexts/PermissionContext';
 import { canOpenModule } from '@/lib/nav/module-visibility';
 import {
-  Car,
+  PINNED_LAUNCHERS,
+  PLATFORM_DIRECTORY,
+  PLATFORM_FILTER_CHIPS,
+  filterPlatformModules,
+  resolvePinnedLaunchers,
+  type DirectoryFilterKey,
+  type PlatformIconKey,
+  type PlatformModuleEntry,
+} from './modules-directory';
+import {
+  ArrowUpRight,
+  BadgeCheck,
+  BarChart3,
   Bot,
-  Network,
-  Wrench,
-  FileText,
-  Truck,
-  Bus,
-  GraduationCap,
-  ShieldAlert,
-  CarFront,
-  Users,
+  Boxes,
   Building2,
-  Layers,
-  CircleDollarSign,
+  Bus,
+  CalendarCheck,
+  Car,
+  CarFront,
+  ChevronRight,
+  ClipboardCheck,
+  FileText,
+  GraduationCap,
+  Leaf,
+  Moon,
+  Package,
+  Radio,
+  Receipt,
+  Search,
+  Settings,
+  Shield,
+  ShieldAlert,
   ShieldCheck,
   Smartphone,
-  BarChart3,
-  Radio,
-  Leaf,
-  Boxes,
-  Sparkles,
-  ArrowUpRight,
-  Search,
-  Headphones,
-  Settings,
-  Anchor,
+  Store,
+  Sun,
+  Truck,
+  Users,
+  Wrench,
+  X,
 } from 'lucide-react';
 
-interface ModuleDef {
-  id: string;
-  title: string;
-  category: 'intelligence' | 'services' | 'operations' | 'assets' | 'governance' | 'finance' | 'admin';
-  description: string;
-  href: string;
-  icon: React.ReactNode;
-  gradient: string;
-  borderAccent: string;
-  tags: string[];
-  status: string;
-  stats?: Array<{ label: string; value: string | number }>;
-  flagship?: boolean;
-  quickActions?: Array<{ label: string; href: string }>;
+const ICON_MAP: Record<PlatformIconKey, React.ComponentType<{ className?: string; 'aria-hidden'?: boolean }>> = {
+  smart_toy: Bot,
+  policy: ShieldCheck,
+  local_shipping: Truck,
+  directions_bus: Bus,
+  school: GraduationCap,
+  inventory_2: Package,
+  assignment: FileText,
+  car_rental: Car,
+  hub: Radio,
+  storefront: Store,
+  emergency: ShieldAlert,
+  build_circle: Wrench,
+  book_online: CalendarCheck,
+  smartphone: Smartphone,
+  directions_car: CarFront,
+  car_repair: Wrench,
+  badge: Users,
+  sensors: Boxes,
+  verified_user: BadgeCheck,
+  eco: Leaf,
+  bar_chart: BarChart3,
+  groups: Building2,
+  receipt_long: Receipt,
+  settings: Settings,
+};
+
+function ModuleIcon({
+  name,
+  className = 'w-[18px] h-[18px]',
+}: {
+  name: PlatformIconKey;
+  className?: string;
+}) {
+  const Icon = ICON_MAP[name] ?? Radio;
+  return <Icon className={className} aria-hidden={true} />;
 }
-
-const MODULES: ModuleDef[] = [
-  // ── 1. AI & INTELLIGENCE ──────────────────────────────────────────
-  {
-    id: 'agents',
-    title: 'AI Agent Ecosystem & Copilot',
-    category: 'intelligence',
-    description: '10 autonomous AI copilots — predictive maintenance, smart dispatch optimizer, accident triage, WhatsApp RAC booking assistant, and compliance ratchets.',
-    href: '/agents',
-    icon: <Sparkles className="w-5 h-5 text-violet-400" />,
-    gradient: 'from-violet-500/20 to-purple-500/10',
-    borderAccent: 'hover:border-violet-500/50',
-    tags: ['10 AI Agents', 'Predictive Triage', 'Smart Dispatch', 'WhatsApp AI'],
-    status: 'ACTIVE',
-    flagship: true,
-    stats: [
-      { label: 'Autonomous Agents', value: '10 Online' },
-      { label: 'AI Accuracy', value: '98.2%' },
-      { label: 'Triage Speed', value: '0.4s' },
-      { label: 'Cost Avoidance', value: 'AED 42k' },
-    ],
-    quickActions: [
-      { label: 'Agent Command', href: '/agents' },
-      { label: 'Threshold Tuning', href: '/agents' },
-    ],
-  },
-  {
-    id: 'ai-platform',
-    title: 'AI Platform & Governance',
-    category: 'intelligence',
-    description: 'Autonomous policy guardrails (L0–L4), financial token spend budgets, multi-provider AI gateway, and ground-truth model benchmarks.',
-    href: '/ai-platform',
-    icon: <Sparkles className="w-5 h-5 text-cyan-400" />,
-    gradient: 'from-cyan-500/20 to-blue-500/10',
-    borderAccent: 'hover:border-cyan-500/50',
-    tags: ['Governance', 'ROI Tracking', 'AI Gateway', 'Benchmarks'],
-    status: 'LIVE',
-    flagship: true,
-    stats: [
-      { label: 'Net ROI', value: '+AED 42.4k' },
-      { label: 'Autonomy Level', value: 'L2 Guarded' },
-      { label: 'Model Quality', value: '96.8%' },
-    ],
-    quickActions: [
-      { label: 'ROI Dashboard', href: '/ai-platform' },
-      { label: 'Set Policy', href: '/ai-platform' },
-    ],
-  },
-
-  // ── 2. TRANSPORT SERVICES (LOB) ───────────────────────────────────
-  {
-    id: 'drayage',
-    title: 'Port & Container Drayage',
-    category: 'services',
-    description: 'End-to-end L1/L2 container haulage, live E11/E311 corridor radar, Dubai Trade & ATLP e-Token automation, 2×20FT Bogie & Street-Turn triangulation, and Consignee Portal.',
-    href: '/logistics/drayage',
-    icon: <Anchor className="w-5 h-5 text-cyan-400" />,
-    gradient: 'from-cyan-500/20 to-blue-500/10',
-    borderAccent: 'hover:border-cyan-500/50',
-    tags: ['Live Corridor Radar', 'PCS e-Tokens', '2×20FT Bogie', 'Street-Turn', 'Consignee Portal'],
-    status: 'LIVE',
-    flagship: true,
-    stats: [
-      { label: 'Corridor Radar', value: 'Live GPS' },
-      { label: 'PCS Gate Sync', value: '100% Auto' },
-      { label: 'Deadhead Saved', value: '-42 km' },
-      { label: 'Ramp Offload', value: 'Live ETC' },
-    ],
-    quickActions: [
-      { label: 'Live Corridor Radar', href: '/logistics/drayage/tracking' },
-      { label: 'Job Assignment', href: '/logistics/drayage/assignment' },
-      { label: 'PCS & Containers', href: '/logistics/drayage/containers' },
-      { label: 'Consignee Portal', href: '/logistics/drayage/portal' },
-    ],
-  },
-  {
-    id: 'bus-ops',
-    title: 'Staff Transportation (STS)',
-    category: 'services',
-    description: 'Fixed corporate bus route schedules, PCE constraint optimization, passenger manifests, shift roster synchronization, and live boarding tracking.',
-    href: '/bus-ops',
-    icon: <Bus className="w-5 h-5 text-indigo-400" />,
-    gradient: 'from-indigo-500/15 to-blue-500/10',
-    borderAccent: 'hover:border-indigo-500/50',
-    tags: ['Staff Shuttles', 'PCE Optimizer', 'Shift Sync', 'Passenger Manifest'],
-    status: 'LIVE',
-    flagship: true,
-    stats: [
-      { label: 'Active Routes', value: '89' },
-      { label: 'PCE Optimization', value: '94.2%' },
-      { label: 'Monthly Pax', value: '28.4k' },
-    ],
-    quickActions: [
-      { label: 'Route Planner', href: '/bus-ops/route-planner' },
-      { label: 'Planning Engine', href: '/bus-ops/planning-engine' },
-    ],
-  },
-  {
-    id: 'school-bus',
-    title: 'School Bus Transportation',
-    category: 'services',
-    description: 'Student safety registry, RFID badge attendance tracking, guardian WhatsApp SMS alerts, and DOT safety compliance.',
-    href: '/school-bus',
-    icon: <GraduationCap className="w-5 h-5 text-amber-400" />,
-    gradient: 'from-amber-500/15 to-yellow-500/10',
-    borderAccent: 'hover:border-amber-500/50',
-    tags: ['Student RFID', 'Guardian Alerts', 'DOT Safety'],
-    status: 'LIVE',
-    stats: [
-      { label: 'Active Students', value: '3,420' },
-      { label: 'Live Buses', value: '62' },
-    ],
-  },
-  {
-    id: 'logistics',
-    title: 'Logistics & Freight Ops',
-    category: 'services',
-    description: 'End-to-end heavy logistics dispatch, digital ePOD, bulk consignment merge optimizer, cold chain telematics, and route tracking.',
-    href: '/logistics',
-    icon: <Truck className="w-5 h-5 text-yellow-400" />,
-    gradient: 'from-yellow-500/15 to-amber-500/10',
-    borderAccent: 'hover:border-yellow-500/50',
-    tags: ['Heavy Freight', 'Digital ePOD', 'Cold Chain', 'Multi-Drop'],
-    status: 'LIVE',
-    stats: [
-      { label: 'In Transit', value: '35 Trips' },
-      { label: 'On-Time Rate', value: '99.1%' },
-    ],
-    quickActions: [
-      { label: 'Port Drayage', href: '/logistics/drayage' },
-      { label: 'Live Corridor Radar', href: '/logistics/drayage/tracking' },
-    ],
-  },
-  {
-    id: 'leasing',
-    title: 'Vehicle Long-Term Leasing',
-    category: 'services',
-    description: 'Corporate long-term leases, automated monthly billing, lessee profiles, contract renewals, and return inspection scoring.',
-    href: '/leasing',
-    icon: <FileText className="w-5 h-5 text-purple-400" />,
-    gradient: 'from-purple-500/15 to-pink-500/10',
-    borderAccent: 'hover:border-purple-500/50',
-    tags: ['Corporate Leases', 'Billing Schedules', 'Vehicle Returns'],
-    status: 'LIVE',
-    stats: [
-      { label: 'Active Leases', value: '412' },
-      { label: 'Renewals (30d)', value: '18' },
-    ],
-  },
-  {
-    id: 'rental',
-    title: 'Rent-A-Car (RAC) Operations',
-    category: 'services',
-    description: 'Fleet RAC desk, dynamic tariffs, customer KYC, cross-border permits (Oman/KSA), damage claims, and automated traffic fine billing.',
-    href: '/rental/bookings',
-    icon: <Car className="w-5 h-5 text-emerald-400" />,
-    gradient: 'from-emerald-500/20 to-teal-500/10',
-    borderAccent: 'hover:border-emerald-500/50',
-    tags: ['Daily/Weekly RAC', 'KYC Verification', 'Cross-Border Permits', 'Damage Claims'],
-    status: 'LIVE',
-    stats: [
-      { label: 'RAC Fleet Size', value: '1,166' },
-      { label: 'Active Bookings', value: '586' },
-      { label: 'Fleet Utilization', value: '89.4%' },
-      { label: 'Avg Daily Rate', value: 'AED 185' },
-    ],
-    quickActions: [
-      { label: '+ New Booking', href: '/rental/bookings' },
-      { label: 'Tariff Master', href: '/rental' },
-    ],
-  },
-
-  // ── 3. LIVE OPERATIONS & DISPATCH ────────────────────────────────
-  {
-    id: 'dispatch',
-    title: 'Dispatch Control Center',
-    category: 'operations',
-    description: 'Real-time multi-modal dispatch command center with auto-dispatch algorithm, trip merge optimizer, and live GIS map tracking.',
-    href: '/dispatch',
-    icon: <Radio className="w-5 h-5 text-sky-400" />,
-    gradient: 'from-sky-500/15 to-cyan-500/10',
-    borderAccent: 'hover:border-sky-500/50',
-    tags: ['Auto-Dispatch', 'Live Map', 'Trip Merge', 'Driver Radar'],
-    status: 'LIVE',
-    stats: [
-      { label: 'Active Trips', value: '84' },
-      { label: 'Dispatch SLA', value: '< 2 min' },
-    ],
-  },
-  {
-    id: 'exchange',
-    title: 'Fleet360 Exchange & Marketplace',
-    category: 'operations',
-    description: 'Private transport partner network & outsourced dispatch marketplace — Blind RFQ bidding, zone rate cards, zero-login driver tracking, and UAE FTA Tax Invoices.',
-    href: '/exchange/dashboard',
-    icon: <Network className="w-5 h-5 text-cyan-400" />,
-    gradient: 'from-cyan-500/20 to-blue-500/10',
-    borderAccent: 'hover:border-cyan-500/50',
-    tags: ['Partner Network', 'Blind RFQ', 'FTA Tax Invoices', 'Scorecards'],
-    status: 'LIVE',
-    stats: [
-      { label: 'Partner Network', value: '24 Verified' },
-      { label: 'Active RFQs', value: '12 Live' },
-      { label: 'Settlement', value: '3-Way Auto' },
-    ],
-    quickActions: [
-      { label: 'Post RFQ', href: '/exchange/dashboard' },
-      { label: 'Rate Cards', href: '/exchange/fleet' },
-    ],
-  },
-  {
-    id: 'incidents',
-    title: 'Incident & Emergency Response',
-    category: 'operations',
-    description: 'Emergency response coordination, ambulance dispatch, on-scene collision intake, and police report documentation.',
-    href: '/incidents',
-    icon: <ShieldAlert className="w-5 h-5 text-rose-400" />,
-    gradient: 'from-rose-500/15 to-red-500/10',
-    borderAccent: 'hover:border-rose-500/50',
-    tags: ['Emergency 999', 'Ambulance Unit', 'Police Reports'],
-    status: 'LIVE',
-  },
-  {
-    id: 'service-tickets',
-    title: 'Field Service Management',
-    category: 'operations',
-    description: 'Service requests and tickets with triage, SLAs and departments, the Field Service catalogue, 1-click towing recovery, replacement fleet swaps, DVIR defect grounding and a case cost ledger.',
-    href: '/service-tickets',
-    icon: <Headphones className="w-5 h-5 text-sky-400" />,
-    gradient: 'from-sky-500/20 to-blue-500/10',
-    borderAccent: 'hover:border-sky-500/50',
-    tags: ['Triage Hopper', 'Towing Dispatch', 'Vehicle Swaps', 'Cost Ledger', 'Active SLA'],
-    status: 'LIVE',
-    flagship: true,
-    stats: [
-      { label: 'Acknowledge SLA', value: '< 15m' },
-      { label: 'Pillars Active', value: '4 Pillars' },
-      { label: 'Auto-Grounding', value: 'Instant' },
-    ],
-    quickActions: [
-      { label: 'Service Tickets', href: '/service-tickets' },
-      { label: 'SLA Matrix', href: '/service-tickets/sla' },
-      { label: 'CSAT Analytics', href: '/service-tickets/csat' },
-    ],
-  },
-  {
-    id: 'booking-portal',
-    title: 'Unified Booking Portal',
-    category: 'operations',
-    description: 'Self-service enterprise portal for corporate bookings, chauffeur cars, freight requests, and approval routing.',
-    href: '/booking-portal',
-    icon: <Layers className="w-5 h-5 text-indigo-400" />,
-    gradient: 'from-indigo-500/15 to-violet-500/10',
-    borderAccent: 'hover:border-indigo-500/50',
-    tags: ['Self-Service', 'Multi-Modal', 'Approval Workflow'],
-    status: 'LIVE',
-  },
-  {
-    id: 'mobile-apps',
-    title: 'Mobile Apps & Driver PWA',
-    category: 'operations',
-    description: 'Native Android APK build, Driver App, Passenger App, and Counter RAC terminal PWAs.',
-    href: '/mobile-apps',
-    icon: <Smartphone className="w-5 h-5 text-pink-400" />,
-    gradient: 'from-pink-500/15 to-rose-500/10',
-    borderAccent: 'hover:border-pink-500/50',
-    tags: ['Android APK', 'Driver PWA', 'Passenger App'],
-    status: 'LIVE',
-    quickActions: [
-      { label: 'Driver Today App', href: '/driver-app/today' },
-      { label: 'Mobile Hub', href: '/mobile-apps' },
-    ],
-  },
-
-  // ── 4. FLEET, ASSETS & WORKFORCE ──────────────────────────────────
-  {
-    id: 'fleet',
-    title: 'Fleet & Vehicle Master',
-    category: 'assets',
-    description: 'Vehicle lifecycle inventory, Mulkiya & Insurance document vault, Salik tolls, fine reconciliation, and full TCO analysis.',
-    href: '/fleet/vehicles',
-    icon: <CarFront className="w-5 h-5 text-amber-400" />,
-    gradient: 'from-amber-500/15 to-orange-500/10',
-    borderAccent: 'hover:border-amber-500/50',
-    tags: ['Vehicle Master', 'Allocations', 'Mulkiya Vault', 'TCO Engine'],
-    status: 'LIVE',
-    stats: [
-      { label: 'Total Fleet', value: '1,420' },
-      { label: 'Ready for Dispatch', value: '1,166' },
-    ],
-  },
-  {
-    id: 'maintenance',
-    title: 'Maintenance & Work Orders',
-    category: 'assets',
-    description: 'Full garage workflow — service requests, workshop quotations, work orders, parts inventory, and predictive wear analytics.',
-    href: '/maintenance',
-    icon: <Wrench className="w-5 h-5 text-blue-400" />,
-    gradient: 'from-blue-500/15 to-indigo-500/10',
-    borderAccent: 'hover:border-blue-500/50',
-    tags: ['Work Orders', 'Quotations', 'Parts Usage', 'QC Check'],
-    status: 'LIVE',
-    stats: [
-      { label: 'In Workshop', value: '18' },
-      { label: 'Avg Turnaround', value: '10 hrs' },
-    ],
-  },
-  {
-    id: 'driver-mgmt',
-    title: 'Driver Operations & HOS',
-    category: 'assets',
-    description: 'Driver license & visa compliance, HOS shift logs, automated driver scoring, and performance telematics.',
-    href: '/driver-mgmt',
-    icon: <Users className="w-5 h-5 text-teal-400" />,
-    gradient: 'from-teal-500/15 to-emerald-500/10',
-    borderAccent: 'hover:border-teal-500/50',
-    tags: ['Driver Scoring', 'HOS Logs', 'Document Vault'],
-    status: 'LIVE',
-  },
-  {
-    id: 'assets',
-    title: 'Assets & Field Inventory',
-    category: 'assets',
-    description: 'High-Value Asset (HVA) calibration logs, BLE beacon tracking, medical supplies, and reverse logistics.',
-    href: '/assets',
-    icon: <Boxes className="w-5 h-5 text-teal-400" />,
-    gradient: 'from-teal-500/15 to-cyan-500/10',
-    borderAccent: 'hover:border-teal-500/50',
-    tags: ['HVA Tracking', 'BLE Beacons', 'Inventory'],
-    status: 'LIVE',
-  },
-
-  // ── 5. GOVERNANCE, ESG & COMPLIANCE ───────────────────────────────
-  {
-    id: 'compliance',
-    title: 'RTA Compliance & Salik',
-    category: 'governance',
-    description: 'RTA commercial road permits, commercial vehicle inspections, insurance policies, and electronic document validation.',
-    href: '/compliance',
-    icon: <ShieldCheck className="w-5 h-5 text-blue-400" />,
-    gradient: 'from-blue-500/15 to-cyan-500/10',
-    borderAccent: 'hover:border-blue-500/50',
-    tags: ['RTA Road Permits', 'Insurance Policies', 'Salik Tag Sync'],
-    status: 'LIVE',
-  },
-  {
-    id: 'sustainability',
-    title: 'ESG & Carbon Intelligence',
-    category: 'governance',
-    description: 'GHG Protocol / ISO 14064 certified CO2 emission tracking, EV fleet transition roadmap, and UAE Net Zero 2050 metrics.',
-    href: '/sustainability',
-    icon: <Leaf className="w-5 h-5 text-emerald-400" />,
-    gradient: 'from-emerald-500/15 to-teal-500/10',
-    borderAccent: 'hover:border-emerald-500/50',
-    tags: ['GHG Protocol', 'Scope 1/2/3', 'EV Transition'],
-    status: 'LIVE',
-  },
-  {
-    id: 'reports',
-    title: 'Cross-Module BI Reports',
-    category: 'governance',
-    description: 'Fleet utilization heatmap, revenue analytics, maintenance cost breakdown, and automated PDF / Excel exports.',
-    href: '/reports',
-    icon: <BarChart3 className="w-5 h-5 text-fuchsia-400" />,
-    gradient: 'from-fuchsia-500/15 to-purple-500/10',
-    borderAccent: 'hover:border-fuchsia-500/50',
-    tags: ['Fleet Analytics', 'Revenue BI', 'Scheduled Exports'],
-    status: 'LIVE',
-  },
-  {
-    id: 'customer-mgmt',
-    title: 'Customer Master & CRM',
-    category: 'governance',
-    description: '3-tier hierarchy (Region, Department, Unit), credit limits, contract master, and communication history.',
-    href: '/customer-mgmt',
-    icon: <Building2 className="w-5 h-5 text-cyan-400" />,
-    gradient: 'from-cyan-500/15 to-blue-500/10',
-    borderAccent: 'hover:border-cyan-500/50',
-    tags: ['3-Tier Hierarchy', 'Credit Master', 'Contracts'],
-    status: 'LIVE',
-  },
-
-  // ── 6. ENTERPRISE & ADMIN ─────────────────────────────────────────
-  {
-    id: 'finance',
-    title: 'Finance & VAT Billing',
-    category: 'finance',
-    description: 'Automated FTA-compliant Tax Invoices, Salik toll batch reconciliation, payment receipts, and revenue reports.',
-    href: '/finance',
-    icon: <CircleDollarSign className="w-5 h-5 text-emerald-400" />,
-    gradient: 'from-emerald-500/15 to-green-500/10',
-    borderAccent: 'hover:border-emerald-500/50',
-    tags: ['FTA Tax Invoices', 'Salik Tolls', '5% VAT Engine'],
-    status: 'LIVE',
-  },
-  {
-    id: 'admin',
-    title: 'Enterprise Administration & Masters',
-    category: 'admin',
-    description: 'Company profile, 3-tier organizational hierarchy, user roles, NUI reasons, and security governance.',
-    href: '/admin',
-    icon: <Settings className="w-5 h-5 text-indigo-400" />,
-    gradient: 'from-indigo-500/15 to-purple-500/10',
-    borderAccent: 'hover:border-indigo-500/50',
-    tags: ['Organization Masters', 'Roles & RBAC', 'NUI Reasons', 'Audit Log'],
-    status: 'LIVE',
-  },
-];
-
-interface CategorySectionDef {
-  id: 'intelligence' | 'services' | 'operations' | 'assets' | 'governance' | 'finance' | 'admin';
-  label: string;
-  shortLabel: string;
-  icon: React.ComponentType<{ className?: string }>;
-  color: string;
-  badgeText: string;
-  description: string;
-}
-
-const PLATFORM_CATEGORIES: CategorySectionDef[] = [
-  {
-    id: 'intelligence',
-    label: 'AI & Intelligence',
-    shortLabel: 'Intelligence',
-    icon: Bot,
-    color: 'text-violet-400 bg-violet-500/10 border-violet-500/20',
-    badgeText: 'AUTONOMOUS COPILOTS',
-    description: 'Autonomous AI copilots, platform governance, predictive maintenance triage & WhatsApp dispatch',
-  },
-  {
-    id: 'services',
-    label: 'Transport & Services',
-    shortLabel: 'Services',
-    icon: Bus,
-    color: 'text-amber-400 bg-amber-500/10 border-amber-500/20',
-    badgeText: 'LINES OF BUSINESS',
-    description: 'Port & container drayage, staff transport shuttles, student bus attendance, logistics freight & Rent-A-Car operations',
-  },
-  {
-    id: 'operations',
-    label: 'Core Fleet Operations',
-    shortLabel: 'Operations',
-    icon: Radio,
-    color: 'text-sky-400 bg-sky-500/10 border-sky-500/20',
-    badgeText: 'LIVE RADAR & DISPATCH',
-    description: 'Live dispatch radar, carrier marketplace exchange, emergency response triage & driver PWAs',
-  },
-  {
-    id: 'assets',
-    label: 'Assets & People',
-    shortLabel: 'Assets & People',
-    icon: CarFront,
-    color: 'text-teal-400 bg-teal-500/10 border-teal-500/20',
-    badgeText: 'FLEET & WORKFORCE',
-    description: 'Vehicle lifecycle master, workshop repair work orders, driver HOS shifts & BLE asset inventory',
-  },
-  {
-    id: 'governance',
-    label: 'Safety & Governance',
-    shortLabel: 'Governance',
-    icon: ShieldCheck,
-    color: 'text-blue-400 bg-blue-500/10 border-blue-500/20',
-    badgeText: 'COMPLIANCE & ESG',
-    description: 'RTA commercial road permits, GHG carbon tracking, cross-module BI analytics & customer CRM',
-  },
-  {
-    id: 'finance',
-    label: 'Finance',
-    shortLabel: 'Finance',
-    icon: CircleDollarSign,
-    color: 'text-emerald-400 bg-emerald-500/10 border-emerald-500/20',
-    badgeText: 'FINANCE & BILLING',
-    description: 'FTA tax invoices, Salik toll reconciliation, 5% VAT engine & general ledger',
-  },
-  {
-    id: 'admin',
-    label: 'Admin',
-    shortLabel: 'Admin',
-    icon: Settings,
-    color: 'text-indigo-400 bg-indigo-500/10 border-indigo-500/20',
-    badgeText: 'ORGANIZATION & MASTERS',
-    description: 'Company profile, hierarchy, user roles, approval workflows & platform settings',
-  },
-];
-
-const CATEGORIES = [
-  { id: 'all', label: 'All Modules', count: MODULES.length },
-  ...PLATFORM_CATEGORIES.map(cat => ({
-    id: cat.id,
-    label: cat.label,
-    count: MODULES.filter(m => m.category === cat.id).length,
-  })),
-];
 
 export default function PlatformPage() {
   const { setLanguage, tLabel, isRTL } = useLanguage();
   const { user, tenant, permissions, isAuthenticated, isLoading } = usePermissions();
+  const { resolved: resolvedTheme, setChoice: setThemeChoice } = useTheme();
 
-  const [selectedCategory, setSelectedCategory] = useState('all');
+  const [activeFilter, setActiveFilter] = useState<DirectoryFilterKey>('all');
   const [searchQuery, setSearchQuery] = useState('');
+  const [selectedId, setSelectedId] = useState<string>(PLATFORM_DIRECTORY[0].id);
+  const [pendingApprovals, setPendingApprovals] = useState<number | null>(null);
+  const inspectorRef = useRef<HTMLElement | null>(null);
 
-  const canOpen = (id: string) => {
-    if (!user) return true;
-    const enabled = tenant?.enabledModules ?? [];
-    const isStandaloneDrayage =
-      user.roleCode !== 'SUPER_ADMIN' &&
-      enabled.length > 0 &&
-      !enabled.includes('logistics') &&
-      (enabled.includes('drayage') || enabled.includes('port-drayage') || enabled.includes('container-drayage'));
+  const canOpen = useCallback(
+    (id: string) => {
+      if (!user) return true;
+      const enabled = tenant?.enabledModules ?? [];
+      const isStandaloneDrayage =
+        user.roleCode !== 'SUPER_ADMIN' &&
+        enabled.length > 0 &&
+        !enabled.includes('logistics') &&
+        (enabled.includes('drayage') ||
+          enabled.includes('port-drayage') ||
+          enabled.includes('container-drayage'));
 
-    if (id === 'logistics' && isStandaloneDrayage) {
-      return false;
-    }
-    if (id === 'drayage') {
-      if (user.roleCode === 'SUPER_ADMIN') return true;
-      if (enabled.length === 0) return canOpenModule('logistics', { roleCode: user.roleCode, enabledModules: enabled, permissions });
-      if (enabled.includes('drayage') || enabled.includes('port-drayage') || enabled.includes('container-drayage') || enabled.includes('logistics')) {
-        return canOpenModule('logistics', { roleCode: user.roleCode, enabledModules: enabled, permissions });
+      if (id === 'logistics' && isStandaloneDrayage) {
+        return false;
       }
-      return false;
-    }
-    return canOpenModule(id, { roleCode: user.roleCode, enabledModules: tenant?.enabledModules, permissions });
-  };
+      if (id === 'drayage') {
+        if (user.roleCode === 'SUPER_ADMIN') return true;
+        if (enabled.length === 0) {
+          return canOpenModule('logistics', {
+            roleCode: user.roleCode,
+            enabledModules: enabled,
+            permissions,
+          });
+        }
+        if (
+          enabled.includes('drayage') ||
+          enabled.includes('port-drayage') ||
+          enabled.includes('container-drayage') ||
+          enabled.includes('logistics')
+        ) {
+          return canOpenModule('logistics', {
+            roleCode: user.roleCode,
+            enabledModules: enabled,
+            permissions,
+          });
+        }
+        return false;
+      }
+      return canOpenModule(id, {
+        roleCode: user.roleCode,
+        enabledModules: tenant?.enabledModules,
+        permissions,
+      });
+    },
+    [user, tenant?.enabledModules, permissions],
+  );
 
+  // Language policy: English default unless authenticated tenant configures Arabic.
   useEffect(() => {
     if (isLoading) return;
     if (isAuthenticated && tenant?.defaultLanguage === 'ar') {
@@ -584,283 +158,630 @@ export default function PlatformPage() {
     }
   }, [isAuthenticated, tenant?.defaultLanguage, isLoading, setLanguage]);
 
+  // Fetch live pending approvals badge count for signed-in users.
+  useEffect(() => {
+    if (!isAuthenticated) {
+      setPendingApprovals(null);
+      return;
+    }
+    let cancelled = false;
+    fetch('/api/my-approvals', { cache: 'no-store' })
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (cancelled || !data) return;
+        const total =
+          typeof data?.summary?.total === 'number'
+            ? data.summary.total
+            : Array.isArray(data?.approvals)
+              ? data.approvals.length
+              : null;
+        setPendingApprovals(total);
+      })
+      .catch(() => {
+        if (!cancelled) setPendingApprovals(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [isAuthenticated, tenant?.id]);
+
+  const accessibleModules = useMemo(
+    () => PLATFORM_DIRECTORY.filter((m) => canOpen(m.id)),
+    [canOpen],
+  );
+
+  const filteredModules = useMemo(
+    () => filterPlatformModules(accessibleModules, activeFilter, searchQuery),
+    [accessibleModules, activeFilter, searchQuery],
+  );
+
+  const pinnedLaunchers = useMemo(
+    () => resolvePinnedLaunchers(accessibleModules),
+    [accessibleModules],
+  );
+
+  const chipCounts = useMemo(() => {
+    const counts: Record<DirectoryFilterKey, number> = {
+      all: accessibleModules.length,
+      ai: 0,
+      transport: 0,
+      core: 0,
+      assets: 0,
+      safety: 0,
+      finance: 0,
+    };
+    for (const m of accessibleModules) {
+      counts[m.filterKey] += 1;
+    }
+    return counts;
+  }, [accessibleModules]);
+
+  // Resolve the active module for the sticky Inspector: always stays within accessible modules.
+  const selectedModule: PlatformModuleEntry | null = useMemo(() => {
+    const exactInFiltered = filteredModules.find((m) => m.id === selectedId);
+    if (exactInFiltered) return exactInFiltered;
+    const exactInAccessible = accessibleModules.find((m) => m.id === selectedId);
+    if (exactInAccessible && filteredModules.length > 0) return exactInAccessible;
+    return filteredModules[0] ?? accessibleModules[0] ?? null;
+  }, [filteredModules, accessibleModules, selectedId]);
+
+  const handleSelectModule = (id: string, scrollOnMobile = false) => {
+    setSelectedId(id);
+    if (scrollOnMobile && typeof window !== 'undefined' && window.innerWidth < 1024) {
+      inspectorRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }
+  };
+
   const openPalette = () => {
     if (typeof window !== 'undefined') {
       window.dispatchEvent(new Event('fleet360:open-command-palette'));
     }
   };
 
-  const visibleCategories = PLATFORM_CATEGORIES.filter(
-    cat => selectedCategory === 'all' || cat.id === selectedCategory
-  );
-
-  const getFilteredModulesForCategory = (categoryId: string) => {
-    return MODULES.filter(mod => {
-      if (mod.category !== categoryId) return false;
-      if (!canOpen(mod.id)) return false;
-      if (!searchQuery.trim()) return true;
-      const q = searchQuery.toLowerCase();
-      return (
-        mod.title.toLowerCase().includes(q) ||
-        mod.description.toLowerCase().includes(q) ||
-        mod.tags.some(t => t.toLowerCase().includes(q))
-      );
-    });
-  };
-
-  const totalMatches = visibleCategories.reduce(
-    (sum, cat) => sum + getFilteredModulesForCategory(cat.id).length,
-    0
+  const showAdminBtn = !user || canOpen('admin');
+  const totalAccessible = accessibleModules.length;
+  const searchPlaceholder = tLabel(
+    `Jump to any of ${totalAccessible || PLATFORM_DIRECTORY.length} modules, e-Tokens, Salik, RFQ...`,
   );
 
   return (
-    <div dir={isRTL ? 'rtl' : 'ltr'} className="min-h-screen bg-[var(--bg-canvas)] text-[var(--text-main)] transition-colors duration-150 flex flex-col">
-      {/* Top Spatial Glass Enterprise Bar */}
-      <nav className="border-b border-[var(--border-subtle)] bg-[var(--bg-surface)]/85 backdrop-blur-xl sticky top-0 z-40">
-        <div className="max-w-7xl mx-auto px-6 py-3.5 flex items-center justify-between gap-4">
-          <div className="flex items-center gap-3.5">
-            <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-blue-600 to-cyan-500 flex items-center justify-center font-mono font-black text-white text-xs shadow-md shadow-cyan-500/20">
-              F360
-            </div>
-            <div className="flex items-center gap-2">
-              <span className="text-[var(--text-main)] font-extrabold text-sm tracking-tight">Fleet360</span>
-              <span className="text-[10px] font-mono font-bold bg-cyan-500/15 text-cyan-500 px-2.5 py-0.5 rounded-full border border-cyan-500/30">
+    <div
+      dir={isRTL ? 'rtl' : 'ltr'}
+      className="platform-shell min-h-screen flex flex-col antialiased transition-colors duration-150"
+    >
+      {/* ── Top Sticky Header ──────────────────────────────────────── */}
+      <header
+        className="sticky top-0 z-30 border-b px-4 sm:px-6 py-3"
+        style={{
+          backgroundColor: 'var(--pf-header-bg)',
+          borderColor: 'var(--pf-outline-variant)',
+        }}
+      >
+        <div className="max-w-7xl mx-auto flex flex-wrap lg:flex-nowrap items-center justify-between gap-3 lg:gap-4">
+          {/* Brand Emblem + Tenant Pill */}
+          <div className="flex items-center gap-3 shrink-0">
+            <Link
+              href="/platform"
+              className="w-9 h-9 rounded-[6px] flex items-center justify-center pf-font-headline text-[16px] leading-[22px] font-bold shrink-0"
+              style={{
+                backgroundColor: 'var(--pf-primary)',
+                color: 'var(--pf-on-primary)',
+              }}
+              aria-label="Fleet360 Enterprise Home"
+            >
+              F
+            </Link>
+            <div className="flex items-baseline gap-2 min-w-0">
+              <span
+                className="pf-font-headline text-[16px] leading-[22px] font-semibold tracking-tight"
+                style={{ color: 'var(--pf-on-surface)' }}
+              >
+                Fleet360
+              </span>
+              <span
+                className="pf-font-mono text-[11px] leading-[14px] font-semibold tracking-[0.3px] px-2 py-1 rounded-[4px] truncate max-w-[160px]"
+                style={{
+                  backgroundColor: 'var(--pf-badge-bg)',
+                  color: 'var(--pf-primary)',
+                }}
+              >
                 {tenant?.name ? tenant.name.toUpperCase() : tLabel('ENTERPRISE')}
               </span>
             </div>
           </div>
 
-          <div className="flex items-center gap-3">
+          {/* Filter / Jump Search Bar */}
+          <form
+            role="search"
+            onSubmit={(e) => e.preventDefault()}
+            className="pf-search-form order-3 lg:order-2 w-full lg:flex-1 lg:max-w-lg flex items-center rounded-[6px] px-3 py-2"
+          >
+            <Search
+              className="w-4 h-4 shrink-0 mr-2 rtl:mr-0 rtl:ml-2"
+              style={{ color: 'var(--pf-primary)' }}
+              aria-hidden={true}
+            />
+            <input
+              id="split-search"
+              name="search"
+              type="search"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              aria-label={tLabel(`Search and filter ${totalAccessible || 24} modules`)}
+              placeholder={searchPlaceholder}
+              className="w-full bg-transparent border-0 p-0 text-[14px] leading-[20px] focus:outline-none focus:ring-0"
+              style={{ color: 'var(--pf-on-surface)' }}
+            />
+            {searchQuery && (
+              <button
+                type="button"
+                onClick={() => setSearchQuery('')}
+                aria-label={tLabel('Clear search')}
+                className="p-0.5 rounded hover:opacity-80 mr-1.5 rtl:mr-0 rtl:ml-1.5"
+                style={{ color: 'var(--pf-on-surface-variant)' }}
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            )}
             <button
+              type="button"
               onClick={openPalette}
-              className="hidden md:flex items-center gap-2.5 px-3 py-1.5 rounded-xl bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] hover:border-[var(--border-strong)] text-[var(--text-muted)] hover:text-[var(--text-main)] text-xs transition-all cursor-pointer group"
+              title={tLabel('Open Universal Command Palette')}
+              className="pf-font-mono text-[12px] leading-[16px] font-medium ml-2 rtl:ml-0 rtl:mr-2 px-2 py-0.5 rounded-[4px] border shrink-0 cursor-pointer"
+              style={{
+                backgroundColor: 'var(--pf-kbd-bg)',
+                borderColor: 'var(--pf-outline-variant)',
+                color: 'var(--pf-on-surface-variant)',
+              }}
             >
-              <Search className="w-3.5 h-3.5 text-[var(--text-muted)] group-hover:text-cyan-500 transition-colors" />
-              <span>{tLabel('Omni Search')}</span>
-              <kbd className="px-1.5 py-0.5 rounded bg-[var(--bg-surface)] border border-[var(--border-subtle)] font-mono text-[10px] text-[var(--text-muted)] group-hover:border-cyan-500/40">
-                ⌘K
-              </kbd>
+              ⌘K
+            </button>
+          </form>
+
+          {/* Right Action Cluster */}
+          <div className="order-2 lg:order-3 flex items-center gap-2 shrink-0">
+            {/* Desktop ThemeToggle + Mobile quick theme switch */}
+            <div className="hidden xl:block w-[132px] shrink-0">
+              <ThemeToggle />
+            </div>
+            <button
+              type="button"
+              onClick={() => setThemeChoice(resolvedTheme === 'dark' ? 'light' : 'dark')}
+              aria-label={resolvedTheme === 'dark' ? 'Switch to Light theme' : 'Switch to Dark theme'}
+              title={resolvedTheme === 'dark' ? 'Light theme' : 'Dark theme'}
+              className="xl:hidden pf-btn-secondary inline-flex items-center justify-center w-9 h-9 rounded-[6px]"
+            >
+              {resolvedTheme === 'dark' ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
             </button>
 
-            <ThemeToggle />
             <Link
               href="/approvals"
-              className="px-3 py-1.5 rounded-xl bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] hover:border-[var(--border-strong)] text-xs font-semibold text-[var(--text-main)] transition-all"
+              className="pf-btn-secondary inline-flex items-center gap-1.5 px-3 py-2 rounded-[6px] text-[13px] leading-[18px] font-semibold tracking-[0.1px]"
             >
-              {tLabel('Approvals')}
+              <ClipboardCheck
+                className="w-4 h-4 shrink-0"
+                style={{ color: 'var(--pf-secondary)' }}
+                aria-hidden={true}
+              />
+              <span className="hidden sm:inline">{tLabel('Approvals')}</span>
+              {pendingApprovals !== null && pendingApprovals > 0 && (
+                <span
+                  className="pf-font-mono text-[12px] leading-[16px] font-medium px-1.5 rounded-[4px] tabular-nums"
+                  style={{
+                    backgroundColor: 'var(--pf-secondary-container)',
+                    color: 'var(--pf-on-secondary-container)',
+                  }}
+                >
+                  {pendingApprovals}
+                </span>
+              )}
             </Link>
-            <Link
-              href="/admin"
-              className="px-3 py-1.5 rounded-xl bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] hover:border-[var(--border-strong)] text-xs font-semibold text-[var(--text-main)] transition-all"
-            >
-              {tLabel('Admin')}
-            </Link>
+
+            {showAdminBtn && (
+              <Link
+                href="/admin"
+                className="pf-btn-primary inline-flex items-center gap-1.5 px-3 py-2 rounded-[6px] text-[13px] leading-[18px] font-semibold tracking-[0.1px]"
+              >
+                <Shield className="w-4 h-4 shrink-0" aria-hidden={true} />
+                <span>{tLabel('Admin')}</span>
+              </Link>
+            )}
+
             <PlatformSessionSlot />
           </div>
         </div>
-      </nav>
+      </header>
 
-      {/* Main Container */}
-      <main className="max-w-7xl mx-auto px-6 py-8 flex-1 w-full space-y-10">
-        {/* Module search */}
-        <div className="relative max-w-3xl mx-auto w-full">
-          <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--text-muted)]" />
-          <input
-            type="text"
-            value={searchQuery}
-            onChange={e => setSearchQuery(e.target.value)}
-            placeholder={tLabel('Search modules, features, tariffs, permits, telematics...')}
-            aria-label={tLabel('Search modules')}
-            className="w-full bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-xl pl-10 pr-14 py-3 text-[var(--text-main)] placeholder:text-[var(--text-muted)] text-sm focus:outline-none focus:border-[var(--border-strong)] transition-all"
-          />
-          <button
-            type="button"
-            onClick={openPalette}
-            className="absolute right-2.5 top-1/2 -translate-y-1/2 text-xs font-mono font-semibold px-2 py-0.5 rounded bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] text-[var(--text-muted)] hover:text-[var(--text-main)]"
-            title={tLabel('Open Universal Command Palette')}
-          >
-            ⌘K
-          </button>
-        </div>
-
-        {/* Category Navigation Pills */}
-        <div className="flex items-center justify-center gap-2 flex-wrap border-b border-[var(--border-subtle)] pb-4">
-          {CATEGORIES.map(cat => {
-            const isActive = selectedCategory === cat.id;
-            const visibleCount = MODULES.filter(m => (cat.id === 'all' || m.category === cat.id) && canOpen(m.id)).length;
-            return (
-              <button
-                key={cat.id}
-                onClick={() => setSelectedCategory(cat.id)}
-                className={`flex items-center gap-2 px-3.5 py-1.5 rounded-full text-xs font-semibold transition-all ${
-                  isActive
-                    ? 'bg-emerald-500/15 border border-emerald-500/40 text-emerald-500 shadow-sm'
-                    : 'bg-[var(--bg-surface)] border border-[var(--border-subtle)] text-[var(--text-muted)] hover:text-[var(--text-main)] hover:border-[var(--border-strong)]'
-                }`}
-              >
-                <span>{tLabel(cat.label)}</span>
-                <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-mono ${isActive ? 'bg-emerald-500/20 text-emerald-400' : 'bg-[var(--bg-surface-hover)] text-[var(--text-muted)]'}`}>
-                  {visibleCount}
-                </span>
-              </button>
-            );
-          })}
-        </div>
-
-        {/* Empty State */}
-        {totalMatches === 0 && (
-          <div className="py-16 text-center space-y-3">
-            <div className="w-12 h-12 rounded-2xl bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] flex items-center justify-center mx-auto text-[var(--text-muted)]">
-              <Search className="w-6 h-6" />
-            </div>
-            <h3 className="text-base font-bold text-[var(--text-main)]">{tLabel('No modules found')}</h3>
-            <p className="text-xs text-[var(--text-muted)] max-w-sm mx-auto">
-              {tLabel('No modules matched')} &quot;{searchQuery}&quot;.
-            </p>
-            <button
-              onClick={() => { setSearchQuery(''); setSelectedCategory('all'); }}
-              className="px-3.5 py-1.5 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-xs font-semibold hover:bg-emerald-500/20 transition-all"
+      {/* ── Split Master-Detail Workspace ──────────────────────────── */}
+      <div className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 py-6 grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+        {/* Left Column: Pinned Trio + Filter Chips + Module Index List */}
+        <main className="lg:col-span-7 flex flex-col gap-4">
+          {/* Pinned Quick-Launch Trio */}
+          {pinnedLaunchers.length > 0 && (
+            <section
+              aria-label={tLabel('Pinned Quick Launchers')}
+              className="grid grid-cols-1 sm:grid-cols-3 gap-3 items-stretch"
             >
-              {tLabel('Reset Filters')}
-            </button>
-          </div>
-        )}
+              {pinnedLaunchers.map((pin) => {
+                const isSelected = selectedModule?.id === pin.moduleId;
+                const iconBg =
+                  pin.tone === 'primary'
+                    ? 'var(--pf-primary)'
+                    : pin.tone === 'secondary'
+                      ? 'var(--pf-secondary-container)'
+                      : 'var(--pf-pin-mid-icon-bg)';
+                const iconFg =
+                  pin.tone === 'primary'
+                    ? 'var(--pf-on-primary)'
+                    : pin.tone === 'secondary'
+                      ? 'var(--pf-on-secondary-container)'
+                      : 'var(--pf-primary)';
+                const metricColor =
+                  pin.tone === 'primary'
+                    ? 'var(--pf-primary)'
+                    : pin.tone === 'secondary'
+                      ? 'var(--pf-secondary)'
+                      : 'var(--pf-on-surface-variant)';
 
-        {/* Categorized Widget Sections */}
-        {visibleCategories.map(cat => {
-          const catModules = getFilteredModulesForCategory(cat.id);
-          if (catModules.length === 0) return null;
-          const CatIcon = cat.icon;
-
-          return (
-            <section key={cat.id} className="space-y-4">
-              {/* Category Section Header */}
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-[var(--border-subtle)] pb-3.5">
-                <div className="flex items-center gap-3">
-                  <div className={`w-9 h-9 rounded-xl border ${cat.color} flex items-center justify-center flex-shrink-0 shadow-sm`}>
-                    <CatIcon className="w-4 h-4" />
-                  </div>
-                  <div>
-                    <div className="flex items-center gap-2.5">
-                      <h2 className="text-base sm:text-lg font-extrabold text-[var(--text-main)] tracking-tight">
-                        {tLabel(cat.label)}
-                      </h2>
-                      <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded-full bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] text-[var(--text-muted)]">
-                        {catModules.length} {tLabel(catModules.length === 1 ? 'Module' : 'Modules')}
-                      </span>
-                      <span className="hidden md:inline-block text-[9px] font-mono font-bold px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
-                        {tLabel(cat.badgeText)}
-                      </span>
-                    </div>
-                    <p className="text-xs text-[var(--text-muted)] mt-0.5">
-                      {tLabel(cat.description)}
-                    </p>
-                  </div>
-                </div>
-              </div>
-
-              {/* Bento Grid Module Cards for this Category */}
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {catModules.map(mod => {
-                  const isFlagship = mod.flagship;
-
-                  return (
-                    <div
-                      key={mod.id}
-                      className={`group relative bg-[var(--bg-surface)] border border-[var(--border-subtle)] ${mod.borderAccent} rounded-2xl p-5 hover:shadow-xl transition-all duration-200 flex flex-col justify-between ${
-                        isFlagship ? 'shadow-sm' : ''
-                      }`}
+                return (
+                  <button
+                    key={pin.moduleId}
+                    type="button"
+                    data-pin-id={pin.moduleId}
+                    data-active={isSelected ? 'true' : 'false'}
+                    onClick={() => handleSelectModule(pin.moduleId, true)}
+                    className="pf-pin-card cursor-pointer text-left rtl:text-right rounded-[8px] p-3 flex items-center gap-3"
+                  >
+                    <span
+                      className="w-9 h-9 shrink-0 rounded-[6px] flex items-center justify-center"
+                      style={{ backgroundColor: iconBg, color: iconFg }}
                     >
-                      <div>
-                        {/* Card Header: Icon + Status Pill */}
-                        <div className="flex items-start justify-between gap-3 mb-3.5">
-                          <div className={`w-11 h-11 rounded-xl bg-gradient-to-br ${mod.gradient} border border-[var(--border-subtle)] flex items-center justify-center flex-shrink-0 shadow-sm`}>
-                            {mod.icon}
-                          </div>
+                      <ModuleIcon name={pin.module.icon} className="w-[18px] h-[18px]" />
+                    </span>
+                    <div className="min-w-0">
+                      <p
+                        className="text-[13px] leading-[18px] font-semibold tracking-[0.1px] truncate"
+                        style={{ color: 'var(--pf-on-surface)' }}
+                      >
+                        {tLabel(pin.shortTitle)}
+                      </p>
+                      <p
+                        className="pf-font-mono text-[12px] leading-[16px] font-medium tabular-nums truncate"
+                        style={{ color: metricColor }}
+                      >
+                        {tLabel(pin.metricSummary)}
+                      </p>
+                    </div>
+                  </button>
+                );
+              })}
+            </section>
+          )}
 
-                          <div className="flex items-center gap-1.5 rounded-full bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5">
-                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                            <span className="text-emerald-500 text-[10px] font-bold font-mono tracking-wider">{tLabel(mod.status)}</span>
-                          </div>
-                        </div>
+          {/* Category Filter Chips */}
+          <div className="flex flex-wrap items-center gap-2" role="tablist" aria-label={tLabel('Module Categories')}>
+            {PLATFORM_FILTER_CHIPS.map((chip) => {
+              const count = chipCounts[chip.key];
+              if (chip.key !== 'all' && count === 0) return null;
+              const isActive = activeFilter === chip.key;
+              return (
+                <button
+                  key={chip.key}
+                  type="button"
+                  role="tab"
+                  aria-selected={isActive}
+                  data-filter={chip.key}
+                  data-active={isActive ? 'true' : 'false'}
+                  onClick={() => setActiveFilter(chip.key)}
+                  className="pf-chip px-3 py-1 rounded-full text-[11px] leading-[14px] font-semibold tracking-[0.3px] cursor-pointer"
+                >
+                  {tLabel(chip.label)} ({count})
+                </button>
+              );
+            })}
+          </div>
 
-                        {/* Title & Description */}
-                        <Link href={mod.href} className="block group-hover:text-emerald-500 transition-colors">
-                          <div className="flex items-center justify-between">
-                            <h3 className="text-[var(--text-main)] font-bold text-base tracking-tight group-hover:text-emerald-500 transition-colors">
-                              {tLabel(mod.title)}
-                            </h3>
-                            <ArrowUpRight className="w-4 h-4 text-[var(--text-muted)] group-hover:text-emerald-500 group-hover:translate-x-0.5 group-hover:-translate-y-0.5 transition-all" />
-                          </div>
-                          <p className="text-[var(--text-muted)] text-xs mt-1.5 leading-relaxed line-clamp-2">
-                            {tLabel(mod.description)}
+          {/* Filterable Module Index List */}
+          <div
+            id="split-list"
+            className="rounded-[8px] border overflow-hidden"
+            style={{
+              backgroundColor: 'var(--pf-card-bg)',
+              borderColor: 'var(--pf-outline-variant)',
+            }}
+          >
+            {filteredModules.length === 0 ? (
+              <div data-testid="empty-state" className="empty-state py-14 px-6 text-center space-y-3">
+                <div
+                  className="w-11 h-11 rounded-[8px] border flex items-center justify-center mx-auto"
+                  style={{
+                    backgroundColor: 'var(--pf-metric-bg)',
+                    borderColor: 'var(--pf-outline-variant)',
+                    color: 'var(--pf-on-surface-variant)',
+                  }}
+                >
+                  <Search className="w-5 h-5" aria-hidden={true} />
+                </div>
+                <h3
+                  className="pf-font-headline text-[16px] leading-[22px] font-semibold"
+                  style={{ color: 'var(--pf-on-surface)' }}
+                >
+                  {tLabel('No modules found')}
+                </h3>
+                <p
+                  className="text-[12px] leading-[16px] max-w-sm mx-auto"
+                  style={{ color: 'var(--pf-on-surface-variant)' }}
+                >
+                  {searchQuery
+                    ? `${tLabel('No modules matched')} "${searchQuery}".`
+                    : tLabel('No modules are enabled in this category for your current role.')}
+                </p>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSearchQuery('');
+                    setActiveFilter('all');
+                  }}
+                  className="pf-btn-primary inline-flex items-center px-3.5 py-2 rounded-[6px] text-[13px] leading-[18px] font-semibold cursor-pointer"
+                >
+                  {tLabel('Reset Filters')}
+                </button>
+              </div>
+            ) : (
+              <div>
+                {filteredModules.map((m, idx) => {
+                  const active = selectedModule?.id === m.id;
+                  const leadMetric = m.metrics[0]?.value ?? m.status;
+                  return (
+                    <button
+                      key={m.id}
+                      type="button"
+                      data-module={m.id}
+                      data-active={active ? 'true' : 'false'}
+                      onClick={() => handleSelectModule(m.id, true)}
+                      className="pf-row module-card w-full text-left rtl:text-right px-4 py-3 flex items-center justify-between gap-3 cursor-pointer"
+                      style={{
+                        borderTop: idx > 0 ? '1px solid var(--pf-divider)' : undefined,
+                      }}
+                    >
+                      <div className="flex items-center gap-3 min-w-0">
+                        <span
+                          className="w-9 h-9 shrink-0 rounded-[6px] flex items-center justify-center transition-colors duration-100"
+                          style={{
+                            backgroundColor: active ? 'var(--pf-primary)' : 'var(--pf-row-icon-idle-bg)',
+                            color: active ? 'var(--pf-on-primary)' : 'var(--pf-primary)',
+                          }}
+                        >
+                          <ModuleIcon name={m.icon} className="w-[17px] h-[17px]" />
+                        </span>
+                        <div className="min-w-0">
+                          <p
+                            className="text-[15px] leading-[20px] font-semibold truncate"
+                            style={{ color: 'var(--pf-on-surface)' }}
+                          >
+                            {tLabel(m.name)}
                           </p>
-                        </Link>
-
-                        {/* Feature Tags */}
-                        <div className="flex flex-wrap gap-1.5 mt-3.5 mb-4">
-                          {mod.tags.map(tag => (
-                            <span
-                              key={tag}
-                              className="text-[10px] font-medium bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] text-[var(--text-muted)] rounded-md px-2 py-0.5"
-                            >
-                              {tLabel(tag)}
-                            </span>
-                          ))}
+                          <p
+                            className="text-[12px] leading-[16px] truncate"
+                            style={{ color: 'var(--pf-on-surface-variant)' }}
+                          >
+                            {tLabel(m.categoryLabel)}
+                          </p>
                         </div>
                       </div>
 
-                      {/* Bottom Stats Grid (if available) */}
-                      {mod.stats && mod.stats.length > 0 && (
-                        <div className="border-t border-[var(--border-subtle)] pt-3 mt-auto">
-                          <div className={`grid ${mod.stats.length >= 4 ? 'grid-cols-4' : mod.stats.length === 3 ? 'grid-cols-3' : 'grid-cols-2'} gap-2`}>
-                            {mod.stats.map(stat => (
-                              <div key={stat.label} className="min-w-0">
-                                <p className="text-[9px] uppercase font-bold text-[var(--text-muted)] truncate">{tLabel(stat.label)}</p>
-                                <p className="text-xs font-bold font-mono text-[var(--text-main)] mt-0.5 truncate">{tLabel(String(stat.value))}</p>
-                              </div>
-                            ))}
-                          </div>
-
-                          {/* Quick Action Buttons for Flagship Modules */}
-                          {mod.quickActions && mod.quickActions.length > 0 && (
-                            <div className="flex flex-wrap items-center gap-2 mt-3 pt-2.5 border-t border-[var(--border-subtle)]">
-                              {mod.quickActions.map(action => (
-                                <Link
-                                  key={action.label}
-                                  href={action.href}
-                                  className="px-2.5 py-1 rounded-lg bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] hover:border-emerald-500/40 text-[10px] font-semibold text-[var(--text-main)] hover:text-emerald-500 transition-all"
-                                >
-                                  {tLabel(action.label)}
-                                </Link>
-                              ))}
-                            </div>
-                          )}
-                        </div>
-                      )}
-                    </div>
+                      <div className="flex items-center gap-2 shrink-0">
+                        <span
+                          className="pf-font-mono text-[12px] leading-[16px] font-medium px-2 py-1 rounded-[4px] tabular-nums"
+                          style={{
+                            backgroundColor: active
+                              ? 'var(--pf-row-pill-active-bg)'
+                              : 'var(--pf-row-pill-idle-bg)',
+                            color: active ? 'var(--pf-primary)' : 'var(--pf-on-surface-variant)',
+                          }}
+                        >
+                          {tLabel(leadMetric)}
+                        </span>
+                        <ChevronRight
+                          className="w-4 h-4 shrink-0 rtl:rotate-180"
+                          style={{
+                            color: active ? 'var(--pf-primary)' : 'var(--pf-on-surface-variant)',
+                          }}
+                          aria-hidden={true}
+                        />
+                      </div>
+                    </button>
                   );
                 })}
               </div>
-            </section>
-          );
-        })}
+            )}
+          </div>
+        </main>
 
-        {/* Footer */}
-        <footer className="border-t border-[var(--border-subtle)] pt-6 mt-12 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-[var(--text-muted)]">
+        {/* Right Column: Sticky High-Contrast Live Module Inspector */}
+        <aside
+          ref={inspectorRef}
+          id="inspector-panel"
+          aria-label={tLabel('Live Module Inspector')}
+          className="lg:col-span-5 lg:sticky lg:top-20 rounded-[12px] border overflow-hidden flex flex-col"
+          style={{
+            backgroundColor: 'var(--pf-card-bg)',
+            borderColor: 'var(--pf-outline-variant)',
+          }}
+        >
+          {selectedModule ? (
+            <>
+              {/* High-Contrast Inspector Header */}
+              <header
+                className="p-6 flex flex-col gap-3"
+                style={{
+                  backgroundColor: 'var(--pf-inspector-header-bg)',
+                  borderBottom: '1px solid var(--pf-inspector-header-border)',
+                }}
+              >
+                <div className="flex items-center justify-between gap-3">
+                  <span
+                    className="pf-font-mono text-[11px] leading-[14px] font-semibold tracking-[0.3px] uppercase"
+                    style={{ color: 'var(--pf-inspector-header-cat)' }}
+                  >
+                    {tLabel(selectedModule.categoryLabel)}
+                  </span>
+                  <span
+                    className="pf-font-mono text-[11px] leading-[14px] font-semibold tracking-[0.3px] px-2 py-1 rounded-[4px]"
+                    style={{
+                      backgroundColor: 'var(--pf-primary-container)',
+                      color: 'var(--pf-on-primary-container)',
+                    }}
+                  >
+                    {tLabel(selectedModule.status)}
+                  </span>
+                </div>
+
+                <div className="flex items-center gap-3">
+                  <span
+                    className="w-11 h-11 shrink-0 rounded-[8px] flex items-center justify-center"
+                    style={{
+                      backgroundColor: 'var(--pf-inspector-header-icon-bg)',
+                      color: 'var(--pf-inspector-header-icon-fg)',
+                    }}
+                  >
+                    <ModuleIcon name={selectedModule.icon} className="w-5 h-5" />
+                  </span>
+                  <h2
+                    className="pf-font-headline text-[20px] leading-[28px] font-semibold tracking-[-0.15px]"
+                    style={{ color: 'var(--pf-inspector-header-title)' }}
+                  >
+                    {tLabel(selectedModule.name)}
+                  </h2>
+                </div>
+
+                <p
+                  className="text-[12px] leading-[18px] text-pretty"
+                  style={{ color: 'var(--pf-inspector-header-summary)' }}
+                >
+                  {tLabel(selectedModule.summary)}
+                </p>
+              </header>
+
+              {/* Inspector Body */}
+              <div className="p-6 flex flex-col gap-4">
+                {/* Key Metrics Grid */}
+                <div className="grid grid-cols-2 gap-3">
+                  {selectedModule.metrics.map((metric, idx) => (
+                    <div
+                      key={metric.label}
+                      className="border rounded-[8px] p-3"
+                      style={{
+                        backgroundColor: idx === 0 ? 'var(--pf-metric-lead-bg)' : 'var(--pf-metric-bg)',
+                        borderColor: idx === 0 ? 'var(--pf-metric-lead-border)' : 'var(--pf-outline-variant)',
+                      }}
+                    >
+                      <p
+                        className="text-[11px] leading-[14px] font-semibold tracking-[0.3px] uppercase truncate"
+                        style={{ color: 'var(--pf-on-surface-variant)' }}
+                      >
+                        {tLabel(metric.label)}
+                      </p>
+                      <p
+                        className="pf-font-headline text-[16px] leading-[22px] font-semibold tabular-nums mt-1 truncate"
+                        style={{
+                          color: idx === 0 ? 'var(--pf-primary)' : 'var(--pf-on-surface)',
+                        }}
+                      >
+                        {tLabel(metric.value)}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Quick Capabilities */}
+                <div>
+                  <p
+                    className="text-[11px] leading-[14px] font-semibold tracking-[0.3px] uppercase mb-2"
+                    style={{ color: 'var(--pf-on-surface-variant)' }}
+                  >
+                    {tLabel('Quick Capabilities')}
+                  </p>
+                  <div className="flex flex-wrap gap-1.5">
+                    {selectedModule.tags.map((tag) => (
+                      <span
+                        key={tag}
+                        className="px-2 py-1 rounded-[6px] border text-[11px] leading-[14px] font-semibold tracking-[0.3px]"
+                        style={{
+                          backgroundColor: 'var(--pf-tag-bg)',
+                          borderColor: 'var(--pf-outline-variant)',
+                          color: 'var(--pf-on-surface)',
+                        }}
+                      >
+                        {tLabel(tag)}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Action Footer */}
+                <footer
+                  className="flex flex-wrap items-center gap-2 pt-3 border-t"
+                  style={{ borderColor: 'var(--pf-divider)' }}
+                >
+                  {selectedModule.actions[0] && (
+                    <Link
+                      href={selectedModule.actions[0].href}
+                      className="pf-btn-primary flex-1 min-w-[160px] inline-flex items-center justify-center gap-1.5 px-4 py-2 rounded-[6px] text-[13px] leading-[18px] font-semibold tracking-[0.1px]"
+                    >
+                      <span>{tLabel(selectedModule.actions[0].label)}</span>
+                      <ArrowUpRight className="w-4 h-4 shrink-0" aria-hidden={true} />
+                    </Link>
+                  )}
+                  {selectedModule.actions.slice(1).map((action) => (
+                    <Link
+                      key={`${action.label}-${action.href}`}
+                      href={action.href}
+                      className="pf-btn-secondary inline-flex items-center justify-center px-4 py-2 rounded-[6px] text-[13px] leading-[18px] font-semibold tracking-[0.1px]"
+                    >
+                      <span>{tLabel(action.label)}</span>
+                    </Link>
+                  ))}
+                </footer>
+              </div>
+            </>
+          ) : (
+            <div className="p-8 text-center text-[13px]" style={{ color: 'var(--pf-on-surface-variant)' }}>
+              {tLabel('Select a module to inspect capabilities and launch.')}
+            </div>
+          )}
+        </aside>
+      </div>
+
+      {/* Subtle Enterprise Footer */}
+      <footer
+        className="border-t mt-auto"
+        style={{ borderColor: 'var(--pf-outline-variant)' }}
+      >
+        <div
+          className="max-w-7xl mx-auto px-4 sm:px-6 py-4 flex flex-col sm:flex-row items-center justify-between gap-2 text-[12px] leading-[16px]"
+          style={{ color: 'var(--pf-on-surface-variant)' }}
+        >
           <div className="flex items-center gap-2">
-            <span className="w-2 h-2 rounded-full bg-emerald-500" />
-            <span>Fleet360 Enterprise Platform v2.0</span>
-          </div>
-          <div className="flex items-center gap-4">
-            <span>Next.js 15 App Router</span>
+            <span
+              className="w-2 h-2 rounded-full"
+              style={{ backgroundColor: 'var(--pf-primary)' }}
+            />
+            <span className="font-semibold" style={{ color: 'var(--pf-on-surface)' }}>
+              Fleet360 Enterprise
+            </span>
             <span>·</span>
-            <span>PostgreSQL &amp; Prisma Multi-Tenant</span>
-            <span>·</span>
-            <span>Aura Dual-Mode Engine</span>
+            <span className="pf-font-mono tabular-nums">
+              {totalAccessible} / {PLATFORM_DIRECTORY.length} {tLabel('Modules')}
+            </span>
           </div>
-        </footer>
-      </main>
+          <div className="flex items-center gap-3">
+            <span>{tLabel('Split Directory & Module Inspector')}</span>
+            <span>·</span>
+            <span>{PINNED_LAUNCHERS.length} {tLabel('Pinned')}</span>
+          </div>
+        </div>
+      </footer>
     </div>
   );
 }
