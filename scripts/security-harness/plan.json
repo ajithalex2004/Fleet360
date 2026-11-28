@@ -4870,6 +4870,15 @@
    ]
   },
   {
+   "area": "service-tickets",
+   "list": "/api/service-tickets/visits",
+   "detail": "/api/service-tickets/visits/{id}",
+   "writes": [
+    "DELETE",
+    "PATCH"
+   ]
+  },
+  {
    "area": "vehicles",
    "list": "/api/vehicles",
    "detail": "/api/vehicles/{id}",

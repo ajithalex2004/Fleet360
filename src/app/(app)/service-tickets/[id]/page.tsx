@@ -2,26 +2,18 @@
 
 import React, { useEffect, useState, useCallback, use } from 'react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
 import {
   ArrowLeft,
-  Headphones,
   Clock,
   Calendar,
-  User,
   Car,
-  Tag,
   AlertCircle,
-  CheckCircle2,
-  Share2,
   RefreshCw,
-  ExternalLink,
-  ShieldAlert,
 } from 'lucide-react';
-import { PageHeader } from '@/components/ui/page-theme';
 import { CostLedgerCard } from '../components/cost-ledger-card';
 import { ContextDrawer360 } from '../components/context-drawer-360';
-import type { ServiceTicket } from '@/types/service-tickets';
+import { TicketFieldExecutionPanel } from '../components/ticket-field-execution-panel';
+import type { ServiceTicket, TicketHistoryEntry } from '@/types/service-tickets';
 import { BACK_BUTTON } from '@/lib/ui/toggle';
 import { VehicleRef } from '@/components/ui/EntityRef';
 
@@ -51,7 +43,6 @@ const PRIORITY_BADGE: Record<string, string> = {
 
 export default function ServiceTicketDetailsPage({ params }: PageProps) {
   const { id: ticketId } = use(params);
-  const router = useRouter();
 
   const [ticket, setTicket] = useState<ServiceTicket | null>(null);
   const [loading, setLoading] = useState(true);
@@ -70,8 +61,8 @@ export default function ServiceTicketDetailsPage({ params }: PageProps) {
       }
       const data = await res.json();
       setTicket(data.ticket || data);
-    } catch (e: any) {
-      setError(e.message || 'Error loading ticket');
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : 'Error loading ticket');
     } finally {
       setLoading(false);
     }
@@ -194,8 +185,11 @@ export default function ServiceTicketDetailsPage({ params }: PageProps) {
 
         {/* 2-Column Responsive Layout */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* Left Column: Financial Control & Itemized Ledger (2 Spans) */}
+          {/* Left Column: Field Execution + Financial Control & Itemized Ledger (2 Spans) */}
           <div className="lg:col-span-2 space-y-6">
+            {/* Multi-Visit Schedule, Sub-Tasks, Digital Checklists & Signed FSRs */}
+            <TicketFieldExecutionPanel ticketId={ticket.id} ticketType={ticket.ticketType} onUpdated={fetchTicket} />
+
             {/* Multi-Line Cost Ledger Breakdown Card */}
             <CostLedgerCard ticketId={ticket.id} onCostUpdated={fetchTicket} />
 
@@ -213,7 +207,7 @@ export default function ServiceTicketDetailsPage({ params }: PageProps) {
 
               {Array.isArray(ticket.history) && ticket.history.length > 0 ? (
                 <div className="space-y-3 max-h-96 overflow-y-auto pr-1 text-xs">
-                  {[...ticket.history].reverse().map((entry: any, i: number) => (
+                  {[...ticket.history].reverse().map((entry: TicketHistoryEntry, i: number) => (
                     <div key={i} className="p-3 rounded-xl bg-slate-950/70 border border-slate-800/80 space-y-1">
                       <div className="flex items-center justify-between text-slate-400">
                         <span className="font-semibold text-slate-200">{entry.actor || 'System'}</span>

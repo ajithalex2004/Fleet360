@@ -240,6 +240,11 @@ export interface ServiceTicket {
   primaryTechnicianId?: string | null;
   assignedTeamId?: string | null;
   territoryId?: string | null;
+  /** Optional parent Service Order, scheduled dispatch window & FTFR flag (Phase 1 PR 2). */
+  parentTicketId?: string | null;
+  scheduledStartAt?: string | null;
+  scheduledEndAt?: string | null;
+  firstTimeFix?: boolean | null;
 
   /** Per-type custom field values (1C). Schema lives in
    *  TicketTypeConfig.formFields; values are keyed by FormFieldDef.key.
