@@ -21,6 +21,7 @@ const DEFAULT_SCHEDULES: Record<string, string> = {
   'push-scheduler': '*/5 * * * *',
   'workflow-escalation': '*/15 * * * *',
   'service-tickets-sla-sweep': '*/5 * * * *',
+  'service-tickets-automation-sweep': '*/15 * * * *',
   // Recovers stale dispatch claims and re-queues due retries; its retry
   // backoff is 15 minutes.
   'dunning-reconciliation': '*/15 * * * *',

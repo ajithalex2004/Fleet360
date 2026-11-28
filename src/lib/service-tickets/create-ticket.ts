@@ -26,6 +26,16 @@ import { loadServiceConfig } from '@/lib/service-config/load';
 import { resolveTicketInitialStatus, resolveTicketSlaMatrixBatch } from '@/lib/service-config/resolvers';
 import { customerAllowedFsmTypes } from '@/lib/customer-portal/users';
 import { isFsmTypeAllowedForCustomer } from '@/lib/customer-portal/fsm-types';
+import { listDepartments } from '@/lib/service-tickets/departments';
+import {
+  classifyTicketWithAi,
+  computeAutoStatusOnCreate,
+  dispatchTicketAutomationNotifications,
+  maxPriority,
+  resolveAutomationRouting,
+  resolveAutomationRules,
+  type TicketAutomationMeta,
+} from '@/lib/service-tickets/automation-engine';
 import { logAudit } from '@/lib/audit';
 import { captureException } from '@/lib/sentry';
 import { FSM_REQUEST_COLS, TICKET_BASE_COLS, ticketRowToApi, type TicketRow } from './ticket-row';
@@ -42,7 +52,8 @@ export interface CreateTicketBody {
 /** customFields keys only the server may set. */
 const SERVER_OWNED_FIELDS = [
   'assignedDepartment', 'source', 'trackingToken', 'sla', 'customerName', 'customerCode',
-  'siteName', 'siteAddress', 'contactPerson', 'contactMobile', 'assetNo', 'assetName', 'serialNumber',
+  'siteName', 'siteAddress', 'contactPerson', 'contactMobile', 'contactEmail',
+  'assetNo', 'assetName', 'serialNumber', 'automation', 'aiTags', 'aiClassification',
 ];
 
 const bad = (error: string, status = 400) => NextResponse.json({ ok: false, error }, { status });
@@ -161,6 +172,7 @@ export async function createServiceTicket(
         Object.assign(customFields, {
           siteName: site.name, siteAddress: site.address ?? undefined,
           contactPerson: site.contactPerson ?? undefined, contactMobile: site.contactMobile ?? undefined,
+          contactEmail: site.contactEmail ?? undefined,
         });
       } else if (portal) {
         return bad('Select the entity / site where the service is needed.');
@@ -197,6 +209,103 @@ export async function createServiceTicket(
   }
 
   try {
+    // ── Runtime Automation Engine (intake: AI Classification, AI Routing, Auto Status) ──
+    const automationRules = resolveAutomationRules(cfg.rules.automation);
+    let effectivePriority: TicketPriority = priority;
+    let effectiveStatus: string = initialStatus;
+    let autoAssignedTo: string | null = null;
+    const automationHistoryNotes: Array<{ status: string; date: string; actor: string; note: string }> = [];
+    const automationMeta: TicketAutomationMeta = {};
+
+    const needsDepartments = Boolean(
+      automationRules.aiClassification || automationRules.aiRouting || cfg.rules.ticketing?.autoAssignment,
+    );
+    const activeDepartments = needsDepartments ? await listDepartments(tenantId, { tx }) : [];
+
+    let aiSuggestedDepartment: string | null = null;
+    if (automationRules.aiClassification) {
+      const classified = await classifyTicketWithAi({
+        tenantId,
+        ticketType,
+        title,
+        description,
+        currentPriority: effectivePriority,
+        availableDepartments: activeDepartments.map((d) => d.key),
+      });
+      aiSuggestedDepartment = classified.suggestedDepartment;
+      automationMeta.aiTags = classified.tags;
+      automationMeta.aiMethod = classified.method;
+      automationMeta.aiConfidence = classified.confidence;
+      automationMeta.aiSuggestedPriority = classified.suggestedPriority;
+      automationMeta.aiSuggestedDepartment = classified.suggestedDepartment;
+      customFields.aiTags = classified.tags;
+      const upgraded = maxPriority(effectivePriority, classified.suggestedPriority);
+      if (upgraded !== effectivePriority) {
+        automationHistoryNotes.push({
+          status: effectiveStatus,
+          date: new Date().toISOString(),
+          actor: 'Automation Engine',
+          note: `AI Classification upgraded priority from ${effectivePriority} to ${upgraded} (tags: ${classified.tags.join(', ')})`,
+        });
+        effectivePriority = upgraded;
+      }
+    }
+
+    if (automationRules.aiRouting || cfg.rules.ticketing?.autoAssignment) {
+      const routed = resolveAutomationRouting({
+        ticketType,
+        currentDepartment: String(customFields.assignedDepartment ?? 'OPERATIONS_TRIAGE'),
+        currentAssignee: null,
+        availableDepartments: activeDepartments,
+        ticketingRules: cfg.rules.ticketing,
+        aiRoutingEnabled: automationRules.aiRouting,
+        aiSuggestedDepartment,
+      });
+      if (routed.routed) {
+        customFields.assignedDepartment = routed.department;
+        automationMeta.autoRoutedDepartment = routed.department;
+        automationHistoryNotes.push({
+          status: effectiveStatus,
+          date: new Date().toISOString(),
+          actor: 'Automation Engine',
+          note: routed.reason ?? `Auto-routed to ${routed.department}`,
+        });
+      }
+      if (routed.autoAssigned && routed.assignedTo) {
+        autoAssignedTo = routed.assignedTo;
+        automationMeta.autoAssignedTo = routed.assignedTo;
+        automationHistoryNotes.push({
+          status: effectiveStatus,
+          date: new Date().toISOString(),
+          actor: 'Automation Engine',
+          note: `Auto-assigned to ${routed.assignedTo}`,
+        });
+      }
+    }
+
+    if (automationRules.autoStatusUpdate) {
+      const advanced = computeAutoStatusOnCreate({
+        initialStatus: effectiveStatus,
+        assignedDepartment: String(customFields.assignedDepartment ?? 'OPERATIONS_TRIAGE'),
+        assignedTo: autoAssignedTo,
+        autoStatusUpdate: true,
+      });
+      if (advanced !== effectiveStatus) {
+        effectiveStatus = advanced;
+        automationMeta.autoStatusAdvancedTo = advanced;
+        automationHistoryNotes.push({
+          status: advanced,
+          date: new Date().toISOString(),
+          actor: 'Automation Engine',
+          note: `Auto-advanced status to ${advanced}`,
+        });
+      }
+    }
+
+    if (Object.keys(automationMeta).length > 0) {
+      customFields.automation = automationMeta;
+    }
+
     // FSM requests with a customer are numbered FSM-SR-<customer code>-YYXXXX
     // (one yearly series per tenant); other tickets keep the type prefix.
     const resolvedPrefix = (cfg.rules.ticketing.ticketPrefix?.trim()) || 'GEN';
@@ -204,12 +313,15 @@ export async function createServiceTicket(
       ? await nextServiceRequestNumber(tx, tenantId, fsm.customer.code)
       : await nextReadableId(tenantId, ticketType, resolvedPrefix);
 
-    const initialHistory = [{
-      status: initialStatus,
-      date: new Date().toISOString(),
-      actor: portal ? (requestorName ? `${requestorName} (customer)` : 'Customer') : (requestorName ?? actorId),
-      note: initialStatus === 'Awaiting Approval' ? 'Submitted — awaiting approval' : 'Submitted',
-    }];
+    const initialHistory = [
+      {
+        status: initialStatus,
+        date: new Date().toISOString(),
+        actor: portal ? (requestorName ? `${requestorName} (customer)` : 'Customer') : (requestorName ?? actorId),
+        note: initialStatus === 'Awaiting Approval' ? 'Submitted — awaiting approval' : 'Submitted',
+      },
+      ...automationHistoryNotes,
+    ];
 
     const inserted = await tx.$queryRawUnsafe<TicketRow[]>(
       `INSERT INTO service_tickets (
@@ -222,12 +334,23 @@ export async function createServiceTicket(
        RETURNING ${TICKET_BASE_COLS}`,
       tenantId, ticketType, readableId, actorId, requestorName,
       body.vehicleId ?? null, body.relatedDriverId ?? null,
-      title, description || null, priority, initialStatus, body.dueDate ?? null,
+      title, description || null, effectivePriority, effectiveStatus, body.dueDate ?? null,
       JSON.stringify(initialHistory), JSON.stringify(customFields),
     );
 
     let ticket = inserted[0];
     if (!ticket) throw new Error('Insert returned no row');
+
+    if (autoAssignedTo) {
+      const [withAssignee] = await tx.$queryRawUnsafe<TicketRow[]>(
+        `UPDATE service_tickets
+            SET assigned_to = $3
+          WHERE id = $1::uuid AND tenant_id = $2
+          RETURNING ${TICKET_BASE_COLS}`,
+        ticket.id, tenantId, autoAssignedTo,
+      );
+      if (withAssignee) ticket = withAssignee;
+    }
 
     if (fsm) {
       const [withFsm] = await tx.$queryRawUnsafe<TicketRow[]>(
@@ -250,8 +373,32 @@ export async function createServiceTicket(
       entityId: ticket.id,
       entityName: readableId,
       action: 'CREATE',
-      details: `Created ${longLabel} ${readableId}: ${title} (${priority}) — initial status ${initialStatus} via ${statusSource}${portal ? ' from the Customer Portal' : ''}`,
+      details: `Created ${longLabel} ${readableId}: ${title} (${effectivePriority}) — initial status ${effectiveStatus} via ${statusSource}${portal ? ' from the Customer Portal' : ''}`,
     });
+
+    if (
+      automationRules.emailNotifications ||
+      automationRules.whatsappNotifications ||
+      automationRules.smsNotifications
+    ) {
+      void dispatchTicketAutomationNotifications({
+        event: 'CREATED',
+        rules: automationRules,
+        notificationEngineEnabled: cfg.mapping?.notificationEngineEnabled,
+        readableId,
+        title,
+        status: effectiveStatus,
+        priority: effectivePriority,
+        serviceTypeName: longLabel,
+        assignedDepartment: String(customFields.assignedDepartment ?? 'OPERATIONS_TRIAGE'),
+        assignedTo: autoAssignedTo,
+        recipientEmails: [typeof customFields.contactEmail === 'string' ? customFields.contactEmail : null],
+        recipientPhone:
+          (typeof customFields.contactMobile === 'string' ? customFields.contactMobile : null) ??
+          fsm?.customer.contactPhone ??
+          null,
+      });
+    }
 
     const matrices = await resolveTicketSlaMatrixBatch(tenantId, [ticketType]);
     const [created] = await resolveHistoryActors(tx, [ticketRowToApi(ticket, matrices.get(ticketType))]);

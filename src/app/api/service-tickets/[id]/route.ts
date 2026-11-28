@@ -21,6 +21,11 @@ import { loadServiceConfig } from '@/lib/service-config/load';
 import {
   resolveTicketSlaMatrixBatch, pickSlaHours, type SlaMatrix,
 } from '@/lib/service-config/resolvers';
+import {
+  computeAutoStatusOnUpdate,
+  dispatchTicketAutomationNotifications,
+  resolveAutomationRules,
+} from '@/lib/service-tickets/automation-engine';
 import { logAudit } from '@/lib/audit';
 import { bestEffortInTx } from '@/lib/db/best-effort';
 import { isCriticalPriority, ungroundIfClear } from '@/lib/fleet/grounding-blocks';
@@ -45,8 +50,8 @@ interface Row {
 function rowToApi(r: Row, matrix?: SlaMatrix) {
   const priority = r.priority as TicketPriority;
   const customFields = (r.custom_fields && typeof r.custom_fields === 'object') ? r.custom_fields as Record<string, unknown> : {};
-  const assignedDepartment = (customFields.assignedDepartment as any) || 'OPERATIONS_TRIAGE';
-  const source = (customFields.source as any) || 'WEB';
+  const assignedDepartment = (typeof customFields.assignedDepartment === 'string' && customFields.assignedDepartment) || 'OPERATIONS_TRIAGE';
+  const source = (typeof customFields.source === 'string' && customFields.source) || 'WEB';
   return {
     id: r.id, tenantId: r.tenant_id, ticketType: r.ticket_type, readableId: r.readable_id,
     requestorId: r.requestor_id, requestorName: r.requestor_name,
@@ -204,6 +209,25 @@ export async function PATCH(req: NextRequest, { params }: RouteParams) {
         }
       }
 
+      // Load service config upfront so Automation rules (autoStatusUpdate & notifications)
+      // apply cleanly without an extra round-trip.
+      const cfg = await loadServiceConfig(tenantId, existing.ticket_type as TicketType);
+      const automationRules = resolveAutomationRules(cfg?.rules.automation);
+      const nextAssignedTo =
+        typeof body.assignedTo === 'string'
+          ? (body.assignedTo.trim() || null)
+          : body.assignedTo === null
+            ? null
+            : existing.assigned_to;
+      const effectiveStatus = computeAutoStatusOnUpdate({
+        currentStatus: existing.status,
+        requestedStatus: typeof body.status === 'string' ? body.status : undefined,
+        prevAssignedTo: existing.assigned_to,
+        nextAssignedTo,
+        assignedDepartment: (existingFields.assignedDepartment as string) || 'OPERATIONS_TRIAGE',
+        autoStatusUpdate: automationRules.autoStatusUpdate,
+      });
+
       // Build dynamic UPDATE
       const sets: string[] = [];
       const params2: unknown[] = [];
@@ -219,7 +243,7 @@ export async function PATCH(req: NextRequest, { params }: RouteParams) {
       if (body.priority !== undefined && !isTicketPriority(body.priority)) {
         return NextResponse.json({ ok: false, error: 'priority must be Low, Medium, High or Critical.' }, { status: 400 });
       }
-      setIf('status',                 body.status);
+      setIf('status',                 effectiveStatus);
       setIf('priority',               body.priority);
       setIf('title',                  body.title);
       setIf('description',            body.description);
@@ -251,9 +275,6 @@ export async function PATCH(req: NextRequest, { params }: RouteParams) {
         const ticket = updated[0];
         if (!ticket) return NextResponse.json({ ok: false, error: 'Update affected no rows' }, { status: 404 });
 
-        // Resolve the ticket's type label from the central catalogue for the
-        // audit log. Cheap: hits the in-process tenant cache after first call.
-        const cfg = await loadServiceConfig(tenantId, ticket.ticket_type as TicketType);
         void logAudit({
           tenantId,
           userId: userId ?? undefined,
@@ -265,6 +286,31 @@ export async function PATCH(req: NextRequest, { params }: RouteParams) {
             Object.keys(body).filter(k => k !== 'history' && k !== 'attachments' && k !== 'comments').join(', ') || 'updated'
           } → ${ticket.status}`,
         });
+
+        const statusChanged = ticket.status !== existing.status;
+        const assigneeChanged = (ticket.assigned_to ?? null) !== (existing.assigned_to ?? null);
+        if (
+          (statusChanged || assigneeChanged) &&
+          (automationRules.emailNotifications || automationRules.whatsappNotifications || automationRules.smsNotifications)
+        ) {
+          const cf = (ticket.custom_fields && typeof ticket.custom_fields === 'object')
+            ? (ticket.custom_fields as Record<string, unknown>)
+            : {};
+          void dispatchTicketAutomationNotifications({
+            event: statusChanged ? 'STATUS_CHANGED' : 'ASSIGNED',
+            rules: automationRules,
+            notificationEngineEnabled: cfg?.mapping?.notificationEngineEnabled,
+            readableId: ticket.readable_id ?? ticket.id.slice(0, 8),
+            title: ticket.title,
+            status: ticket.status,
+            priority: ticket.priority,
+            serviceTypeName: cfg?.type.name ?? ticket.ticket_type,
+            assignedDepartment: typeof cf.assignedDepartment === 'string' ? cf.assignedDepartment : null,
+            assignedTo: ticket.assigned_to,
+            recipientEmails: [typeof cf.contactEmail === 'string' ? cf.contactEmail : null],
+            recipientPhone: typeof cf.contactMobile === 'string' ? cf.contactMobile : null,
+          });
+        }
 
         const matrix = await matrixFor(tenantId, ticket.ticket_type);
         return NextResponse.json({ ok: true, ticket: rowToApi(ticket, matrix) });
