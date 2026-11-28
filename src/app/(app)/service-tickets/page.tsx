@@ -17,7 +17,7 @@
 
 import { useEffect, useMemo, useState, useCallback, useRef } from 'react';
 import Link from 'next/link';
-import { Headphones, Plus, AlertCircle, Clock, ChevronRight, Star, Send, Inbox, ExternalLink, ListTree } from 'lucide-react';
+import { Headphones, Plus, AlertCircle, Clock, ChevronRight, Star, Send, Inbox, ExternalLink, ListTree, Users } from 'lucide-react';
 import { PageHeader } from '@/components/ui/page-theme';
 import SmartDataGrid, { type SmartDataGridColumn, type KpiTile, type BulkAction } from '@/components/ui/SmartDataGrid';
 import { TICKET_DEPARTMENTS, TICKET_PRIORITIES } from '@/types/service-tickets';
@@ -27,6 +27,7 @@ import { getServiceIcon } from '@/lib/service-tickets/icons';
 import { createMaintenanceRequest } from '@/services/mockData';
 import { ContextDrawer360 } from './components/context-drawer-360';
 import { ForwardTicketModal } from './components/forward-ticket-modal';
+import { AssignTechnicianModal, type AssignSelection } from './components/assign-technician-modal';
 import { NewServiceRequestForm } from './components/new-service-request-form';
 import { VehicleRef } from '@/components/ui/EntityRef';
 
@@ -155,6 +156,11 @@ export default function ServiceTicketsHome() {
   const [showForm, setShowForm]                 = useState(false);
   const [drawerTicketId, setDrawerTicketId]     = useState<string | null>(null);
   const [forwardingTicket, setForwardingTicket] = useState<ServiceTicket | null>(null);
+  const [assignModal, setAssignModal]           = useState<{
+    mode: 'Assigned' | 'Escalated';
+    tickets: ServiceTicket[];
+    skippedCount?: number;
+  } | null>(null);
 
   /** Enabled types as a sorted list of (type, config) pairs. Sourced from
    *  typeConfigByType (Service Configuration Engine), filtered through
@@ -283,13 +289,9 @@ export default function ServiceTicketsHome() {
     ticket: ServiceTicket,
     newStatus: 'Acknowledged' | 'Resolved' | 'Assigned' | 'Escalated' | 'Pending' | 'Rejected',
   ) => {
-    let assignee: string | null = null;
     if (newStatus === 'Assigned' || newStatus === 'Escalated') {
-      const v = window.prompt(`${newStatus} ${ticket.readableId ?? ''} to which email?`, ticket.assignedTo ?? '');
-      if (!v) return;
-      const trimmed = v.trim();
-      if (!/.+@.+\..+/.test(trimmed)) { alert('Please enter a valid email.'); return; }
-      assignee = trimmed;
+      setAssignModal({ mode: newStatus, tickets: [ticket] });
+      return;
     }
 
     // Approval gate — confirm and capture an optional reason for Reject.
@@ -304,13 +306,11 @@ export default function ServiceTicketsHome() {
     }
 
     let extraNote: string | undefined =
-      assignee
-        ? `${newStatus} to ${assignee}${ticket.assignedTo ? ` (was ${ticket.assignedTo})` : ''}`
-        : newStatus === 'Pending' && ticket.status === 'Awaiting Approval'
-          ? 'Approved — moved to Pending'
-          : newStatus === 'Rejected'
-            ? rejectReason ? `Rejected: ${rejectReason}` : 'Rejected'
-            : undefined;
+      newStatus === 'Pending' && ticket.status === 'Awaiting Approval'
+        ? 'Approved — moved to Pending'
+        : newStatus === 'Rejected'
+          ? rejectReason ? `Rejected: ${rejectReason}` : 'Rejected'
+          : undefined;
 
     let mrId: string | null = null;
 
@@ -339,7 +339,6 @@ export default function ServiceTicketsHome() {
 
     const updated = await patch(ticket.id, {
       status: newStatus,
-      ...(assignee ? { assignedTo: assignee } : {}),
       ...(mrId    ? { maintenanceRequestId: mrId } : {}),
       history: withHistory(ticket, newStatus, userId ?? 'user', extraNote),
     });
@@ -361,20 +360,15 @@ export default function ServiceTicketsHome() {
       return;
     }
 
-    let assignee: string | null = null;
     if (newStatus === 'Assigned' || newStatus === 'Escalated') {
-      const v = window.prompt(`${newStatus} ${targets.length} tickets to which email?`, '');
-      if (!v) return;
-      const trimmed = v.trim();
-      if (!/.+@.+\..+/.test(trimmed)) { alert('Please enter a valid email.'); return; }
-      assignee = trimmed;
+      setAssignModal({ mode: newStatus, tickets: targets, skippedCount: skipped });
+      return;
     }
-    if (!window.confirm(`Apply "${newStatus}"${assignee ? ` (${assignee})` : ''} to ${targets.length} tickets?${skipped ? ` ${skipped} triage ticket(s) will be skipped.` : ''}`)) return;
+    if (!window.confirm(`Apply "${newStatus}" to ${targets.length} tickets?${skipped ? ` ${skipped} triage ticket(s) will be skipped.` : ''}`)) return;
 
     const updates = await Promise.all(targets.map(async t => {
       let mrId: string | null = null;
-      let note: string | undefined =
-        assignee ? `Bulk ${newStatus.toLowerCase()} to ${assignee}${t.assignedTo ? ` (was ${t.assignedTo})` : ''}` : `Bulk ${newStatus.toLowerCase()}`;
+      let note: string | undefined = `Bulk ${newStatus.toLowerCase()}`;
 
       const autoCreatesMR = !!typeConfigByType[t.ticketType]?.autoCreatesMaintenanceRequest;
       if (autoCreatesMR && newStatus === 'Acknowledged' && t.vehicleId) {
@@ -393,7 +387,6 @@ export default function ServiceTicketsHome() {
 
       return patch(t.id, {
         status: newStatus,
-        ...(assignee ? { assignedTo: assignee } : {}),
         ...(mrId ? { maintenanceRequestId: mrId } : {}),
         history: withHistory(t, newStatus, userId ?? 'user', note),
       });
@@ -405,6 +398,40 @@ export default function ServiceTicketsHome() {
   };
   const handleBulkRef = useRef(handleBulk);
   handleBulkRef.current = handleBulk;
+
+  const handleConfirmAssign = async (selection: AssignSelection) => {
+    if (!assignModal) return;
+    const { mode, tickets: targets } = assignModal;
+    const isBulk = targets.length > 1;
+    const updates = await Promise.all(
+      targets.map((t) => {
+        const prefix = isBulk ? `Bulk ${mode.toLowerCase()}` : mode;
+        const note = `${prefix} to ${selection.displayLabel}${t.assignedTo ? ` (was ${t.assignedTo})` : ''}`;
+        const payload: Record<string, unknown> = {
+          status: mode,
+          assignedTo: selection.assignedTo,
+          history: withHistory(t, mode, userId ?? 'user', note),
+        };
+        if (selection.primaryTechnicianId || t.primaryTechnicianId) {
+          payload.primaryTechnicianId = selection.primaryTechnicianId;
+        }
+        if (selection.assignedTeamId || t.assignedTeamId) {
+          payload.assignedTeamId = selection.assignedTeamId;
+        }
+        if (selection.territoryId || t.territoryId) {
+          payload.territoryId = selection.territoryId;
+        }
+        return patch(t.id, payload);
+      }),
+    );
+    const ok = updates.filter(Boolean) as ServiceTicket[];
+    const byId = new Map(ok.map((u) => [u.id, u]));
+    setTickets((prev) => prev.map((t) => byId.get(t.id) ?? t));
+    setAssignModal(null);
+    if (isBulk) {
+      alert(`${ok.length}/${targets.length} tickets updated.`);
+    }
+  };
 
   const drawerTicket = useMemo(
     () => (drawerTicketId ? tickets.find(t => t.id === drawerTicketId) ?? null : null),
@@ -555,7 +582,13 @@ export default function ServiceTicketsHome() {
         icon={Headphones}
         accent="violet"
         actions={
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
+            <Link
+              href="/service-tickets/technicians"
+              className="inline-flex items-center gap-1.5 rounded-xl bg-slate-900 border border-cyan-500/30 px-3.5 py-2 text-xs font-semibold text-cyan-300 hover:bg-cyan-950/40 hover:border-cyan-500/60 transition-all shadow-sm"
+            >
+              <Users className="w-3.5 h-3.5 text-cyan-400" /> Technicians &amp; Teams
+            </Link>
             <Link
               href="/service-tickets/sla"
               className="inline-flex items-center gap-1.5 rounded-xl bg-slate-900 border border-rose-500/30 px-3.5 py-2 text-xs font-semibold text-rose-300 hover:bg-rose-950/40 hover:border-rose-500/60 transition-all shadow-sm"
@@ -716,6 +749,23 @@ export default function ServiceTicketsHome() {
             alert(`Ticket forwarded to Workshop & Maintenance. Created Work Order #${createdMr.workOrderNo || createdMr.id}`);
           }
         }}
+      />
+
+      {/* Assign Technician / Squad / Escalation Modal */}
+      <AssignTechnicianModal
+        isOpen={!!assignModal}
+        mode={assignModal?.mode ?? 'Assigned'}
+        ticketLabel={
+          assignModal
+            ? assignModal.tickets.length === 1
+              ? (assignModal.tickets[0].readableId ?? assignModal.tickets[0].title)
+              : `${assignModal.tickets.length} tickets${assignModal.skippedCount ? ` (${assignModal.skippedCount} triage skipped)` : ''}`
+            : ''
+        }
+        department={assignModal?.tickets.length === 1 ? assignModal.tickets[0].assignedDepartment : null}
+        currentAssignee={assignModal?.tickets.length === 1 ? assignModal.tickets[0].assignedTo : null}
+        onClose={() => setAssignModal(null)}
+        onConfirm={handleConfirmAssign}
       />
     </div>
   );

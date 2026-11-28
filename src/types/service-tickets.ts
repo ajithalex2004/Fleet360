@@ -236,6 +236,10 @@ export interface ServiceTicket {
 
   /** Email or user ID of the assignee. */
   assignedTo?: string;
+  /** Optional linked FSM technician, team/squad, and service territory (Phase 1 PR 1). */
+  primaryTechnicianId?: string | null;
+  assignedTeamId?: string | null;
+  territoryId?: string | null;
 
   /** Per-type custom field values (1C). Schema lives in
    *  TicketTypeConfig.formFields; values are keyed by FormFieldDef.key.
