@@ -14,11 +14,12 @@
  * Browser-safe.
  */
 
-import type { TransportCategory } from '@/lib/customer-portal/catalog';
+import type { TransportCategory, TransportCategoryCode } from '@/lib/customer-portal/catalog';
+import type { CategoryAccent } from '@/lib/booking-portal/service-module-map';
 import type { RequestFieldDef, RequestFieldType, RequestFormDef, RequestSectionDef } from './form-schema';
 
 export interface CategoryDefinition {
-  category: TransportCategory;
+  category: TransportCategoryCode;
   title: string;
   description: string;
   /** Vehicle usage recorded on requests, as in the FSM catalogue. */
@@ -26,6 +27,25 @@ export interface CategoryDefinition {
   menu: string[];
   form: RequestFormDef;
 }
+
+export interface CategoryVisualMeta {
+  icon: string;
+  badge: string;
+  accent: CategoryAccent;
+  defaultModuleKey: string | null;
+  defaultBookingPortalEnabled: boolean;
+}
+
+export const BUILTIN_VISUAL_DEFAULTS: Record<TransportCategory, CategoryVisualMeta> = {
+  RAC:             { icon: '🚗', badge: 'RENTAL',    accent: 'emerald', defaultModuleKey: 'rental',     defaultBookingPortalEnabled: true },
+  LEASING:         { icon: '📋', badge: 'LEASING',   accent: 'blue',    defaultModuleKey: 'leasing',    defaultBookingPortalEnabled: true },
+  LIMOUSINE:       { icon: '🚘', badge: 'CHAUFFEUR', accent: 'violet',  defaultModuleKey: 'dispatch',   defaultBookingPortalEnabled: false },
+  STAFF_TRANSPORT: { icon: '🚌', badge: 'SHUTTLE',   accent: 'purple',  defaultModuleKey: 'bus-ops',    defaultBookingPortalEnabled: true },
+  EXECUTIVE:       { icon: '⭐', badge: 'EXECUTIVE', accent: 'amber',   defaultModuleKey: 'dispatch',   defaultBookingPortalEnabled: true },
+  LOGISTICS:       { icon: '🚛', badge: 'LOGISTICS', accent: 'orange',  defaultModuleKey: 'logistics',  defaultBookingPortalEnabled: true },
+  SCHOOL_BUS:      { icon: '🏫', badge: 'SCHOOL',    accent: 'yellow',  defaultModuleKey: 'school-bus', defaultBookingPortalEnabled: true },
+  RECOVERY:        { icon: '🔧', badge: 'RECOVERY',  accent: 'rose',    defaultModuleKey: 'dispatch',   defaultBookingPortalEnabled: false },
+};
 
 type Extra = Omit<RequestFieldDef, 'key' | 'label' | 'type'>;
 const f = (key: string, label: string, type: RequestFieldType, extra: Extra = {}): RequestFieldDef => ({ key, label, type, ...extra });
@@ -476,3 +496,54 @@ export const CATEGORY_DEFINITIONS: Record<TransportCategory, CategoryDefinition>
 
 /** Pages every category gets in the Customer Portal, before its own menu. */
 export const COMMON_MENU = ['New request', 'Active requests', 'History'];
+
+export type CustomCategoryTemplate = 'BLANK' | TransportCategory;
+
+export const CUSTOM_CATEGORY_TEMPLATES: ReadonlyArray<{ key: CustomCategoryTemplate; label: string; hint: string }> = [
+  { key: 'BLANK',           label: 'Standard Transport Starter', hint: 'Contact, Trip & Locations, Schedule, and Notes' },
+  { key: 'RAC',             label: 'Clone from Rent-a-Car',      hint: 'Driver license, vehicle class, protection, rental period' },
+  { key: 'EXECUTIVE',       label: 'Clone from Executive',       hint: 'VIP protocol, flight hold, chauffeur itinerary' },
+  { key: 'STAFF_TRANSPORT', label: 'Clone from Staff Transport', hint: 'Employee shift, commute route & boarding details' },
+  { key: 'LOGISTICS',       label: 'Clone from Logistics',       hint: 'Shipper/consignee, cargo specs, hazmat & customs' },
+  { key: 'LEASING',         label: 'Clone from Leasing',         hint: 'Company procurement, fleet quantity, lease terms' },
+  { key: 'SCHOOL_BUS',      label: 'Clone from School Bus',      hint: 'Parent/guardian, student roster & safety consent' },
+  { key: 'LIMOUSINE',       label: 'Clone from Limousine',       hint: 'Hourly/full-day chauffeur service & flight tracking' },
+  { key: 'RECOVERY',        label: 'Clone from Recovery',        hint: 'Vehicle plate, breakdown issue & roadside urgency' },
+];
+
+/**
+ * Default base form for any tenant-created custom category.
+ * Kept minimal with routing essentials (requestor + origin + startDate + notes)
+ * so tenants can freely add custom sections, custom fields, and default values.
+ */
+export function buildBlankCustomForm(): RequestFormDef {
+  return {
+    sections: [
+      s('requestor', 'Requestor & Contact Details', [
+        ...contact('Full Name', 'Email Address', { ...half }),
+      ]),
+      s('service', 'Service & Location Details', [
+        f('vehicleCategory', 'Vehicle / Service Option', 'text', { ...half, placeholder: 'e.g. Standard Van, Dedicated Escort, Chauffeur Sedan' }),
+        f('startDate', 'Service Date', 'date', { ...req, ...half, core: true }),
+        f('pickupTime', 'Service Time', 'time', { ...half }),
+        f('origin', 'Pickup / Origin Location', 'text', { ...req, core: true, placeholder: 'Address, facility, terminal, or landmark' }),
+        f('destination', 'Drop-off / Destination Location', 'text', { placeholder: 'Destination address (optional for on-site services)' }),
+      ]),
+      notes('Additional Instructions', 'Special instructions, reference numbers, or access codes…'),
+    ],
+  };
+}
+
+/** Builds initial CustomFormConfig when cloning from a built-in template into a new custom category. */
+export function cloneTemplateToCustomForm(template: CustomCategoryTemplate): RequestFormDef {
+  if (template === 'BLANK' || !(template in CATEGORY_DEFINITIONS)) {
+    return buildBlankCustomForm();
+  }
+  const source = CATEGORY_DEFINITIONS[template].form;
+  return {
+    sections: source.sections.map((sec) => ({
+      ...sec,
+      fields: sec.fields.map((fld) => ({ ...fld })),
+    })),
+  };
+}

@@ -1,6 +1,6 @@
 /** Customer Portal — Transport: request types, stages and labels shared by the pages. */
 
-import type { TransportCategory } from '@/lib/customer-portal/catalog';
+import type { TransportCategoryCode } from '@/lib/customer-portal/catalog';
 
 export type TransportStatus =
   | 'PENDING_APPROVAL' | 'SUBMITTED' | 'CONFIRMED' | 'ASSIGNED' | 'IN_PROGRESS' | 'COMPLETED' | 'REJECTED' | 'CANCELLED';
@@ -20,7 +20,7 @@ export interface TransportRequestAttachment {
 export interface TransportRequest {
   id: string;
   requestNo: string;
-  category: TransportCategory;
+  category: TransportCategoryCode;
   categoryTitle: string;
   status: TransportStatus;
   values: Record<string, string | number | boolean>;

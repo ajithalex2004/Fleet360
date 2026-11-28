@@ -22,10 +22,10 @@ import crypto from 'crypto';
 import { prisma } from '@/lib/prisma';
 import { withPlatformAdmin, withTenantRls, type TxClient } from '@/lib/rls';
 import { runOutsideRlsScope } from '@/lib/rls-scope';
-import { offeredCategories } from '@/lib/transport-catalog/store';
+import { offeredCategories, tenantCategoryTitleMap } from '@/lib/transport-catalog/store';
 import {
-  CUSTOMER_PORTALS, TRANSPORT_CATEGORY_LABEL, isCustomerPortal, isPortalRole, parsePortalRoleMap,
-  type CustomerPortal, type PortalRole, type PortalRoleMap, type TransportCategory,
+  CUSTOMER_PORTALS, categoryLabel, isCustomerPortal, isPortalRole, parsePortalRoleMap,
+  type CustomerPortal, type PortalRole, type PortalRoleMap, type TransportCategoryCode,
 } from './catalog';
 
 export {
@@ -167,7 +167,7 @@ export async function portalsForCustomer(tenantId: string, customerId: string): 
 
 export interface CustomerPortalSummary {
   customerId: string; code: string | null; name: string; status: string | null;
-  portals: CustomerPortal[]; transportCategories: TransportCategory[]; activeUsers: number; invitedUsers: number;
+  portals: CustomerPortal[]; transportCategories: TransportCategoryCode[]; activeUsers: number; invitedUsers: number;
   /** Linked Rental customer (Rent-a-Car), shown by name. */
   rentalCustomer: { id: string; name: string } | null;
 }
@@ -205,7 +205,7 @@ export async function listCustomerPortalSummaries(tenantId: string): Promise<Cus
   return rows.map((r) => ({
     customerId: r.id, code: r.customer_code, name: r.name_en, status: r.status,
     portals: (r.portals ?? []).filter(isCustomerPortal),
-    transportCategories: (r.transport_categories ?? []) as TransportCategory[],
+    transportCategories: (r.transport_categories ?? []) as TransportCategoryCode[],
     activeUsers: Number(r.active_users), invitedUsers: Number(r.invited_users),
     rentalCustomer: r.rental_customer_id ? { id: r.rental_customer_id, name: r.rental_customer_name ?? r.rental_customer_id } : null,
   }));
@@ -217,7 +217,7 @@ export async function listCustomerPortalSummaries(tenantId: string): Promise<Cus
  */
 export async function setCustomerPortalAccess(
   tenantId: string, customerId: string, portal: CustomerPortal, enabled: boolean, by: string,
-  categories?: TransportCategory[],
+  categories?: TransportCategoryCode[],
 ): Promise<void> {
   await withTenantRls(prisma, tenantId, async (tx) => {
     const [c] = await tx.$queryRawUnsafe<Array<{ id: string }>>(
@@ -227,7 +227,11 @@ export async function setCustomerPortalAccess(
     if (enabled && portal === 'TRANSPORT' && categories) {
       // Only categories the tenant offers (Transport catalogue) can be given;
       // ones the customer already has stay even if no longer offered.
-      const offered = new Set(await offeredCategories(tenantId, tx));
+      const [offeredList, titleMap] = await Promise.all([
+        offeredCategories(tenantId, tx),
+        tenantCategoryTitleMap(tenantId, tx),
+      ]);
+      const offered = new Set(offeredList);
       const [cur] = await tx.$queryRawUnsafe<Array<{ categories: string[] }>>(
         `SELECT categories FROM customer_portal_access WHERE tenant_id = $1 AND customer_id = $2 AND portal = 'TRANSPORT'`,
         tenantId, customerId,
@@ -236,7 +240,7 @@ export async function setCustomerPortalAccess(
       const notOffered = categories.filter((k) => !offered.has(k) && !had.has(k));
       if (notOffered.length) {
         throw new PortalUserError(
-          `Not offered by your Transport catalogue: ${notOffered.map((k) => TRANSPORT_CATEGORY_LABEL[k]).join(', ')}.`,
+          `Not offered by your Transport catalogue: ${notOffered.map((k) => categoryLabel(k, titleMap)).join(', ')}.`,
         );
       }
     }
