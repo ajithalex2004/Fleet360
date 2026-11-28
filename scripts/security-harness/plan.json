@@ -4861,6 +4861,15 @@
    ]
   },
   {
+   "area": "service-tickets",
+   "list": "/api/service-tickets/technicians",
+   "detail": "/api/service-tickets/technicians/{id}",
+   "writes": [
+    "DELETE",
+    "PATCH"
+   ]
+  },
+  {
    "area": "vehicles",
    "list": "/api/vehicles",
    "detail": "/api/vehicles/{id}",
