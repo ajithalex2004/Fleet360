@@ -22,6 +22,8 @@ import { evaluateFleetComplianceRisk } from './fleet-risk';
 import { evaluateDriverReadiness } from './driver-readiness';
 import { validateFtaInvoice } from './fta-tax';
 import { policyService } from '../governance';
+import { loadTenantOperations } from '../data-loaders/tenant-operations';
+import { complianceInput } from '../data-loaders/agent-inputs';
 
 export class ComplianceAgent {
   readonly id = 'compliance' as const;
@@ -41,7 +43,18 @@ export class ComplianceAgent {
   async run(event: AgentEvent): Promise<AgentRunResult> {
     const t0 = Date.now();
     const tenantId = event.tenant_id || 'default';
-    const payload = event.payload || {};
+    let payload: Record<string, unknown> = event.payload || {};
+
+    // A sweep or "Run analysis" carries no data: check this tenant's own
+    // vehicles and drivers, and every driver on today's roster. It used to
+    // evaluate nothing and report one item processed.
+    let dataSource: { loaded: boolean; missingExpiries?: { vehicles: number; drivers: number }; unavailable?: string[] } = { loaded: false };
+    if (!payload.documents && !payload.driverReadinessRequest && !payload.driverReadinessRequests && !payload.invoiceValidationRequest) {
+      const snapshot = await loadTenantOperations(tenantId, { trips: true, duty: true, depots: false });
+      const input = complianceInput(snapshot);
+      payload = { ...payload, documents: input.documents, driverReadinessRequests: input.readinessRequests };
+      dataSource = { loaded: true, missingExpiries: input.missingExpiries, unavailable: snapshot.unavailable };
+    }
 
     const evalResult: ComplianceEvaluationResult = {
       scanType: 'FULL_COMPLIANCE_SWEEP',
@@ -82,15 +95,21 @@ export class ComplianceAgent {
       }
     }
 
-    // 2. Driver Pre-Dispatch Readiness Gate
-    if (payload.driverReadinessRequest) {
-      evalResult.scanType = 'DRIVER_READINESS';
+    // 2. Driver Pre-Dispatch Readiness Gate (one request, or today's roster)
+    const readinessRequests: DriverReadinessRequest[] = [
+      ...(payload.driverReadinessRequest ? [payload.driverReadinessRequest as DriverReadinessRequest] : []),
+      ...(Array.isArray(payload.driverReadinessRequests) ? (payload.driverReadinessRequests as DriverReadinessRequest[]) : []),
+    ];
+    const notReady: string[] = [];
+    for (const request of readinessRequests) {
+      if (!payload.documents) evalResult.scanType = 'DRIVER_READINESS';
       const readiness = evaluateDriverReadiness(
-        payload.driverReadinessRequest as DriverReadinessRequest,
+        request,
         payload.referenceDate ? new Date(payload.referenceDate as string) : new Date(),
       );
       evalResult.driverReadiness = readiness;
       itemsProcessed++;
+      if (!readiness.isEligible) notReady.push(readiness.driverName || readiness.driverId);
 
       if (!readiness.isEligible) {
         actionsCreated++;
@@ -137,6 +156,10 @@ export class ComplianceAgent {
     }
 
     evalResult.actionsGenerated = actionsCreated;
+    if (readinessRequests.length > 1) {
+      (evalResult as unknown as Record<string, unknown>).rosterReadiness = { checked: readinessRequests.length, notReady };
+    }
+    if (dataSource.loaded) (evalResult as unknown as Record<string, unknown>).dataSource = dataSource;
     evalResult.estimatedFinesAvoidedAed = totalFinesAvoidedAed;
 
     const durationMs = Date.now() - t0;
@@ -148,7 +171,7 @@ export class ComplianceAgent {
       entityId: event.entity_id,
       status: 'COMPLETED',
       durationMs,
-      itemsProcessed: itemsProcessed || 1,
+      itemsProcessed,
       actionsCreated,
       output: evalResult,
       telemetry: {

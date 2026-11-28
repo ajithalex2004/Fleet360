@@ -1,18 +1,14 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import {
-  DriverHoursPolicyEngine,
   driverHoursPolicyEngine,
 } from '@/lib/agents/fleet-workforce-planner/policy-engine';
 import {
-  ResourceCostEngine,
   resourceCostEngine,
 } from '@/lib/agents/fleet-workforce-planner/cost-engine';
 import {
-  RepositionSolver,
   repositionSolver,
 } from '@/lib/agents/fleet-workforce-planner/reposition-solver';
 import {
-  MasterPlannerSolver,
   masterPlannerSolver,
 } from '@/lib/agents/fleet-workforce-planner/master-solver';
 import {
@@ -151,9 +147,25 @@ describe('Unified Fleet & Workforce Master Planner Agent Suite', () => {
       expect(plan.recommendedScenario.maintenanceSlots[0].vehicleCode).toBe('COACH-50-01');
       expect(plan.recommendedScenario.maintenanceSlots[0].proposedBy).toBe('PREDICTIVE_MAINTENANCE_RUL');
 
-      // Check Standby Buffer in Scenario B
-      expect(plan.recommendedScenario.standbyAllocations.length).toBeGreaterThanOrEqual(1);
-      expect(plan.recommendedScenario.standbyAllocations[0].standbyDriversCount).toBeGreaterThanOrEqual(1);
+      // Standby is real: the one vehicle the plan leaves unused. Both drivers
+      // are needed (two trips overlap), so there is no spare driver to hold
+      // back — the solver used to invent "Standby Driver 1/2" here.
+      const dataset = FLEET_WORKFORCE_PLANNER_GROUND_TRUTH_DATASETS.standardMultiDepotPlan;
+      const standbyB = plan.recommendedScenario.standbyAllocations.flatMap((s) => s.standbyVehicles.map((v) => v.vehicleCode));
+      expect(standbyB).toEqual(['BUS-C30-02']);
+      for (const s of plan.scenarios) {
+        const used = new Set(s.assignments.flatMap((a) => [a.vehicleId, a.driverId]));
+        for (const alloc of s.standbyAllocations) {
+          for (const v of alloc.standbyVehicles) {
+            expect(dataset.vehicles.some((x) => x.id === v.vehicleId)).toBe(true);
+            expect(used.has(v.vehicleId)).toBe(false);
+          }
+          for (const d of alloc.standbyDrivers) {
+            expect(dataset.drivers.some((x) => x.id === d.driverId)).toBe(true);
+            expect(used.has(d.driverId)).toBe(false);
+          }
+        }
+      }
     });
 
     it('correctly identifies capacity deficit plans as PARTIALLY_FEASIBLE or FEASIBLE_WITH_OUTSOURCING', async () => {

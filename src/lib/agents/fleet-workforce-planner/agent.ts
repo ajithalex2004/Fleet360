@@ -12,6 +12,8 @@ import {
   MasterPlanResult,
 } from '../types';
 import { masterPlannerSolver } from './master-solver';
+import { loadTenantOperations } from '../data-loaders/tenant-operations';
+import { plannerRequest } from '../data-loaders/agent-inputs';
 import { policyService } from '../governance';
 
 export class FleetWorkforcePlannerAgent {
@@ -31,7 +33,19 @@ export class FleetWorkforcePlannerAgent {
   async run(event: AgentEvent): Promise<AgentRunResult> {
     const t0 = Date.now();
     const tenantId = event.tenant_id || 'default';
-    const payload = (event.payload || {}) as Partial<FleetWorkforcePlanningRequest>;
+    let payload = (event.payload || {}) as Partial<FleetWorkforcePlanningRequest>;
+
+    // A scheduled run or "Run analysis" carries no data: plan tomorrow from
+    // this tenant's own trips, vehicles that can legally run, licensed
+    // drivers and depots. It used to plan an empty day.
+    let dataSource: { loaded: boolean; excluded?: { vehicles: number; drivers: number }; unavailable?: string[] } = { loaded: false };
+    if (!payload.trips) {
+      const snapshot = await loadTenantOperations(tenantId, { trips: true, duty: true, depots: true });
+      const loaded = plannerRequest(snapshot);
+      const { excluded, ...req } = loaded;
+      payload = { ...req, ...payload, trips: req.trips };
+      dataSource = { loaded: true, excluded, unavailable: snapshot.unavailable };
+    }
 
     const request: FleetWorkforcePlanningRequest = {
       scheduleDate: payload.scheduleDate || new Date().toISOString().split('T')[0],
@@ -52,8 +66,8 @@ export class FleetWorkforcePlannerAgent {
 
     let actionsCreated = 0;
 
-    // Evaluate proposed master plan with Policy Engine
-    if (planResult.recommendedScenario) {
+    // Nothing to plan is not a plan to approve.
+    if (planResult.recommendedScenario && request.trips.length > 0) {
       actionsCreated++;
 
       // Evaluate action proposal
@@ -93,9 +107,9 @@ export class FleetWorkforcePlannerAgent {
       entityId: event.entity_id,
       status: 'COMPLETED',
       durationMs,
-      itemsProcessed: (request.trips?.length || 1) + (request.vehicles?.length || 0),
+      itemsProcessed: request.trips.length,
       actionsCreated,
-      output: planResult,
+      output: dataSource.loaded ? { ...planResult, dataSource } : planResult,
       telemetry: {
         modelAlias: 'LOCAL_STATISTICAL',
         modelProvider: 'local_solver',
@@ -104,7 +118,7 @@ export class FleetWorkforcePlannerAgent {
         cachedTokens: 0,
         toolCallsCount: 0,
         agentHopsCount: 0,
-        matrixElementsQueried: (request.trips?.length || 1) * (request.vehicles?.length || 1),
+        matrixElementsQueried: request.trips.length * request.vehicles.length,
         solverDurationMs: durationMs,
         costUsd: 0,
         costAed: 0,

@@ -713,6 +713,8 @@ export interface TripScheduleItem {
   passengerCount: number;
   requiredVehicleType?: VehicleCategoryTier | string;
   vehicleCategoryRequired?: VehicleCategoryTier | string;
+  /** Licence the route requires (bus_routes.required_license_type): LIGHT | HEAVY | BUS. */
+  requiredLicenseType?: string;
   requiredFeatures?: string[];
   operationalZone?: string;
   zoneId?: string;
