@@ -886,14 +886,16 @@ function CategoryEditor({
                               <button
                                 type="button"
                                 onClick={() => setEditingOptionsFieldKey(isEditingOptions ? null : f.key)}
-                                className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md border text-[10px] font-semibold transition-colors ${
+                                className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-md border text-[11px] font-bold transition-colors shadow-xs ${
                                   isEditingOptions
-                                    ? 'border-blue-500/50 bg-blue-500/15 text-blue-700 dark:text-blue-300'
-                                    : 'border-[var(--border-subtle)] bg-[var(--bg-main)] hover:border-blue-500/40 hover:text-blue-600 dark:hover:text-blue-300 text-[var(--text-muted)]'
+                                    ? 'border-violet-600 bg-violet-600 text-white hover:bg-violet-700'
+                                    : 'border-violet-400 bg-violet-100 text-violet-800 hover:bg-violet-200 dark:border-violet-400/50 dark:bg-violet-500/20 dark:text-violet-200 dark:hover:bg-violet-500/30'
                                 }`}
                               >
-                                <ListPlus className="w-3 h-3" />
-                                {isEditingOptions ? 'Close Values' : 'Edit Values'}
+                                <ListPlus className="w-3.5 h-3.5" />
+                                {isEditingOptions
+                                  ? 'Close Values'
+                                  : `Edit Values (${effectiveOptions?.length ?? 0})`}
                               </button>
                             )}
                           </div>
@@ -1179,9 +1181,9 @@ function InlineSelectOptionsEditor({
   };
 
   return (
-    <div className="rounded-xl border border-blue-500/30 bg-blue-500/5 p-3 space-y-2.5">
+    <div className="rounded-xl border border-violet-500/40 bg-violet-500/5 p-3 space-y-2.5">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <p className="text-[11px] font-bold text-blue-700 dark:text-blue-300 flex items-center gap-1.5">
+        <p className="text-[11px] font-bold text-violet-800 dark:text-violet-300 flex items-center gap-1.5">
           <ListPlus className="w-3.5 h-3.5" />
           Dropdown Values for {fieldLabel} ({options.length})
         </p>
