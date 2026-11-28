@@ -23,8 +23,10 @@ import {
   PortalUserError, isCustomerPortal, listCustomerPortalSummaries, setCustomerPortalAccess,
 } from '@/lib/customer-portal/users';
 import { categoryLabel, parseTenantCategories } from '@/lib/customer-portal/catalog';
+import { parseFsmRequestTypes, type FsmPortalTypeOption } from '@/lib/customer-portal/fsm-types';
 import { getTenantPortalEntitlements } from '@/lib/customer-portal/tenant-entitlements';
 import { offeredCategories, tenantCategoryTitleMap } from '@/lib/transport-catalog/store';
+import { loadRequestTypes } from '@/lib/service-tickets/request-types';
 
 export const runtime = 'nodejs';
 
@@ -34,17 +36,35 @@ export async function GET(req: NextRequest) {
   const auth = authorizeServiceConfig(req);
   if (!auth.ok) return auth.res;
   try {
-    const [customers, offered, categoryLabels, entitlements] = await Promise.all([
+    const [customers, offered, categoryLabels, entitlements, fsmMeta] = await Promise.all([
       listCustomerPortalSummaries(auth.tenantId),
       offeredCategories(auth.tenantId),
       tenantCategoryTitleMap(auth.tenantId),
       getTenantPortalEntitlements(auth.tenantId),
+      loadRequestTypes(auth.tenantId).catch(() => null),
     ]);
+    const availableFsmTypes: FsmPortalTypeOption[] = fsmMeta
+      ? Object.entries(fsmMeta.typeConfig)
+          .filter(([, cfg]) => cfg.catalogSla && !cfg.vehicleRequired)
+          .sort((a, b) =>
+            a[1].categoryName.localeCompare(b[1].categoryName) ||
+            a[1].sortOrder - b[1].sortOrder ||
+            a[1].name.localeCompare(b[1].name),
+          )
+          .map(([key, cfg]) => ({
+            key,
+            name: cfg.name,
+            categoryKey: cfg.categoryKey,
+            categoryName: cfg.categoryName,
+            priority: cfg.defaultPriority,
+          }))
+      : [];
     return NextResponse.json({
       ok: true,
       customers,
       offeredCategories: offered,
       categoryLabels,
+      availableFsmTypes,
       enabledPortals: entitlements.enabledPortals,
       portalEntitlements: entitlements.portals,
       canEdit: requireAdmin(auth).ok,
@@ -68,21 +88,42 @@ async function handlePUT(req: NextRequest) {
   if (!customerId || !isCustomerPortal(body.portal) || typeof body.enabled !== 'boolean') {
     return NextResponse.json({ ok: false, error: 'customerId, portal (FSM | TRANSPORT) and enabled are required' }, { status: 400 });
   }
-  const categories = body.categories === undefined ? undefined : parseTenantCategories(body.categories);
-  if (categories === null || (categories && body.portal !== 'TRANSPORT')) {
-    return NextResponse.json(
-      { ok: false, error: 'categories must be a list of Transport categories (Transport portal only)' }, { status: 400 },
-    );
+
+  let scopedItems: string[] | undefined;
+  if (body.portal === 'TRANSPORT') {
+    const categories = body.categories === undefined ? undefined : parseTenantCategories(body.categories);
+    if (categories === null || body.fsmTypes !== undefined) {
+      return NextResponse.json(
+        { ok: false, error: 'categories must be a list of Transport categories' }, { status: 400 },
+      );
+    }
+    scopedItems = categories;
+  } else {
+    const rawFsm = body.fsmTypes !== undefined ? body.fsmTypes : body.categories;
+    const fsmTypes = rawFsm === undefined ? undefined : parseFsmRequestTypes(rawFsm);
+    if (fsmTypes === null) {
+      return NextResponse.json(
+        { ok: false, error: 'fsmTypes must be a list of valid Field Service request type keys' }, { status: 400 },
+      );
+    }
+    scopedItems = fsmTypes;
   }
+
   try {
-    await setCustomerPortalAccess(auth.tenantId, customerId, body.portal, body.enabled, auth.userId, categories);
-    const titleMap = categories ? await tenantCategoryTitleMap(auth.tenantId) : undefined;
-    const catText = categories
-      ? ` (categories: ${categories.map((c) => categoryLabel(c, titleMap)).join(', ') || 'none'})` : '';
+    await setCustomerPortalAccess(auth.tenantId, customerId, body.portal, body.enabled, auth.userId, scopedItems);
+    let detailSuffix = '';
+    if (body.portal === 'TRANSPORT' && scopedItems) {
+      const titleMap = await tenantCategoryTitleMap(auth.tenantId);
+      detailSuffix = ` (categories: ${scopedItems.map((c) => categoryLabel(c, titleMap)).join(', ') || 'none'})`;
+    } else if (body.portal === 'FSM' && scopedItems !== undefined) {
+      detailSuffix = scopedItems.length === 0
+        ? ' (FSM request types: all enabled)'
+        : ` (FSM request types: ${scopedItems.join(', ')})`;
+    }
     void logAudit({
       tenantId: auth.tenantId, userId: auth.userId, userRole: auth.role || undefined, entityType: 'CustomerPortalAccess',
       entityId: customerId, entityName: body.portal, action: 'UPDATE',
-      details: `${body.enabled ? 'Enabled' : 'Disabled'} the ${body.portal} Customer Portal for customer ${customerId}${catText}`,
+      details: `${body.enabled ? 'Enabled' : 'Disabled'} the ${body.portal} Customer Portal for customer ${customerId}${detailSuffix}`,
     });
     return NextResponse.json({ ok: true });
   } catch (err) {

@@ -12,7 +12,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
-import { KeyRound, Users, Mail, Copy, X, UserPlus, Check, Truck, Save } from 'lucide-react';
+import { KeyRound, Users, Mail, Copy, X, UserPlus, Check, Truck, Save, Wrench, Search } from 'lucide-react';
 import { PageHeader } from '@/components/ui/page-theme';
 import SmartDataGrid, { type SmartDataGridColumn } from '@/components/ui/SmartDataGrid';
 import {
@@ -22,10 +22,13 @@ import {
   PORTAL_LABEL, PORTAL_ROLES, ROLE_LABEL, TRANSPORT_CATEGORIES, categoryLabel,
   type CustomerPortal, type PortalRole, type TransportCategoryCode,
 } from '@/lib/customer-portal/catalog';
+import type { FsmPortalTypeOption } from '@/lib/customer-portal/fsm-types';
 
 interface CustomerRow {
   customerId: string; code: string | null; name: string; status: string | null;
-  portals: CustomerPortal[]; transportCategories: TransportCategoryCode[]; activeUsers: number; invitedUsers: number;
+  portals: CustomerPortal[]; transportCategories: TransportCategoryCode[];
+  fsmRequestTypes: string[];
+  activeUsers: number; invitedUsers: number;
   rentalCustomer: { id: string; name: string } | null;
 }
 interface PortalAccount {
@@ -50,8 +53,10 @@ export default function CustomerPortalAccessPage() {
   const [err, setErr] = useState<string | null>(null);
   const [managing, setManaging] = useState<CustomerRow | null>(null);
   const [pickingCategories, setPickingCategories] = useState<CustomerRow | null>(null);
+  const [pickingFsmTypes, setPickingFsmTypes] = useState<CustomerRow | null>(null);
   const [offered, setOffered] = useState<TransportCategoryCode[]>([]);
   const [categoryLabels, setCategoryLabels] = useState<Record<string, string>>({});
+  const [availableFsmTypes, setAvailableFsmTypes] = useState<FsmPortalTypeOption[]>([]);
   const [enabledPortals, setEnabledPortals] = useState<CustomerPortal[]>(PORTALS);
   const [linkingRental, setLinkingRental] = useState<CustomerRow | null>(null);
 
@@ -60,6 +65,7 @@ export default function CustomerPortalAccessPage() {
     const d = await res.json().catch(() => null);
     if (!res.ok || !d?.ok) { setErr(d?.error ?? 'Could not load customers'); return; }
     setRows(d.customers); setCanEdit(!!d.canEdit); setOffered(d.offeredCategories ?? []); setCategoryLabels(d.categoryLabels ?? {});
+    setAvailableFsmTypes(Array.isArray(d.availableFsmTypes) ? d.availableFsmTypes : []);
     if (Array.isArray(d.enabledPortals)) setEnabledPortals(d.enabledPortals);
   }, []);
   useEffect(() => { void load(); }, [load]);
@@ -84,6 +90,11 @@ export default function CustomerPortalAccessPage() {
     [enabledPortals, rows],
   );
 
+  const fsmLabelByKey = useMemo(
+    () => Object.fromEntries(availableFsmTypes.map((t) => [t.key, t.name])),
+    [availableFsmTypes],
+  );
+
   const columns = useMemo<SmartDataGridColumn<CustomerRow>[]>(() => {
     const cols: SmartDataGridColumn<CustomerRow>[] = [
       { key: 'code', header: 'Customer ID', accessor: (c) => c.code ?? '', render: (c) => <span className="font-mono text-[11px]">{c.code ?? '—'}</span> },
@@ -92,18 +103,46 @@ export default function CustomerPortalAccessPage() {
     if (showFsmCol) {
       const fsmAllowed = enabledPortals.includes('FSM');
       cols.push({
-        key: 'FSM', header: PORTAL_LABEL.FSM, align: 'center', filter: 'select',
+        key: 'FSM', header: PORTAL_LABEL.FSM, filter: 'select',
         accessor: (c) => (c.portals.includes('FSM') ? 'Enabled' : 'Off'),
         render: (c) => {
           const on = c.portals.includes('FSM');
+          const scoped = c.fsmRequestTypes ?? [];
           return (
-            <div className="inline-flex flex-col items-center gap-0.5" onClick={(e) => e.stopPropagation()}>
+            <div className="flex flex-wrap items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
               <label className="inline-flex items-center gap-1.5 text-xs cursor-pointer">
                 <input type="checkbox" checked={on} disabled={!canEdit || (!fsmAllowed && !on)} onChange={() => void toggle(c, 'FSM')}
-                  aria-label={`${PORTAL_LABEL.FSM} for ${c.name}`} className="rounded border-[var(--border-subtle)] text-blue-600 focus:ring-0" />
-                {on ? 'Enabled' : 'Off'}
+                  aria-label={`${PORTAL_LABEL.FSM} for ${c.name}`} className="rounded border-[var(--border-subtle)] text-violet-600 focus:ring-0" />
+                {on ? '' : 'Off'}
               </label>
               {!fsmAllowed && on && <span className="text-[10px] font-semibold text-amber-600">Disabled in Admin</span>}
+              {on && (scoped.length === 0 ? (
+                <span className="px-1.5 py-0.5 rounded-full border border-emerald-500/30 bg-emerald-500/10 text-[10px] font-semibold text-emerald-700 dark:text-emerald-300">
+                  All types{availableFsmTypes.length ? ` (${availableFsmTypes.length})` : ''}
+                </span>
+              ) : (
+                <>
+                  {scoped.slice(0, 2).map((k) => (
+                    <span key={k} className="px-1.5 py-0.5 rounded-full border border-violet-500/30 bg-violet-500/10 text-[10px] font-semibold text-violet-700 dark:text-violet-300 max-w-[140px] truncate" title={fsmLabelByKey[k] ?? k}>
+                      {fsmLabelByKey[k] ?? k}
+                    </span>
+                  ))}
+                  {scoped.length > 2 && (
+                    <span className="px-1.5 py-0.5 rounded-full border border-violet-500/30 bg-violet-500/10 text-[10px] font-semibold text-violet-700 dark:text-violet-300">
+                      +{scoped.length - 2} more
+                    </span>
+                  )}
+                </>
+              ))}
+              {on && canEdit && fsmAllowed && (
+                <button
+                  type="button"
+                  onClick={() => setPickingFsmTypes(c)}
+                  className="text-[10px] font-semibold text-violet-600 dark:text-violet-300 hover:underline"
+                >
+                  Edit
+                </button>
+              )}
             </div>
           );
         },
@@ -151,12 +190,12 @@ export default function CustomerPortalAccessPage() {
       },
     );
     return cols;
-  }, [canEdit, categoryLabels, enabledPortals, showFsmCol, showTransportCol, toggle]);
+  }, [availableFsmTypes.length, canEdit, categoryLabels, enabledPortals, fsmLabelByKey, showFsmCol, showTransportCol, toggle]);
 
   return (
     <div className="space-y-5 max-w-7xl">
       <PageHeader title="Customer Portal access" icon={KeyRound} accent="blue"
-        subtitle="Choose the portals and Transport categories each customer gets, and invite their users. Customers sign in at /customer-portal." />
+        subtitle="Choose the portals, Field Service request types, and Transport categories each customer gets, and invite their users. Customers sign in at /customer-portal." />
       {err && <FormAlert>{err}</FormAlert>}
       {rows && enabledPortals.length === 0 && (
         <FormAlert tone="warning">
@@ -185,6 +224,259 @@ export default function CustomerPortalAccessPage() {
         <CategoriesDialog customer={pickingCategories} offered={offered} categoryLabels={categoryLabels} onClose={() => setPickingCategories(null)}
           onSaved={() => { setPickingCategories(null); void load(); }} />
       )}
+      {pickingFsmTypes && (
+        <FsmTypesDialog
+          customer={pickingFsmTypes}
+          availableTypes={availableFsmTypes}
+          onClose={() => setPickingFsmTypes(null)}
+          onSaved={() => { setPickingFsmTypes(null); void load(); }}
+        />
+      )}
+    </div>
+  );
+}
+
+function FsmTypesDialog({
+  customer,
+  availableTypes,
+  onClose,
+  onSaved,
+}: {
+  customer: CustomerRow;
+  availableTypes: FsmPortalTypeOption[];
+  onClose: () => void;
+  onSaved: () => void;
+}) {
+  const initialScoped = customer.fsmRequestTypes ?? [];
+  const [mode, setMode] = useState<'all' | 'selected'>(initialScoped.length > 0 ? 'selected' : 'all');
+  const [picked, setPicked] = useState<string[]>(initialScoped);
+  const [search, setSearch] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+
+  const grouped = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    const map = new Map<string, FsmPortalTypeOption[]>();
+    for (const t of availableTypes) {
+      if (
+        q &&
+        !t.name.toLowerCase().includes(q) &&
+        !t.categoryName.toLowerCase().includes(q) &&
+        !t.key.toLowerCase().includes(q)
+      ) {
+        continue;
+      }
+      const cat = t.categoryName || 'Field Service';
+      const list = map.get(cat) ?? [];
+      list.push(t);
+      map.set(cat, list);
+    }
+    return [...map.entries()];
+  }, [availableTypes, search]);
+
+  const availableKeySet = useMemo(() => new Set(availableTypes.map((t) => t.key)), [availableTypes]);
+  const legacyRemoved = useMemo(
+    () => picked.filter((k) => !availableKeySet.has(k)),
+    [picked, availableKeySet],
+  );
+
+  const flip = (key: string) =>
+    setPicked((prev) => (prev.includes(key) ? prev.filter((x) => x !== key) : [...prev, key]));
+
+  const toggleGroup = (keys: string[]) => {
+    setPicked((prev) => {
+      const allOn = keys.every((k) => prev.includes(k));
+      if (allOn) return prev.filter((k) => !keys.includes(k));
+      return [...new Set([...prev, ...keys])];
+    });
+  };
+
+  const save = async () => {
+    if (mode === 'selected' && picked.length === 0) {
+      setErr('Select at least one Field Service request type, or switch to "All enabled types".');
+      return;
+    }
+    setBusy(true); setErr(null);
+    try {
+      const r = await send('/api/customers/portal-access', 'PUT', {
+        customerId: customer.customerId,
+        portal: 'FSM',
+        enabled: true,
+        fsmTypes: mode === 'all' ? [] : picked,
+      });
+      if (!r.ok) { setErr(r.data?.error ?? 'Could not save Field Service request types'); return; }
+      onSaved();
+    } finally { setBusy(false); }
+  };
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
+      role="dialog"
+      aria-modal="true"
+      aria-label={`Field Service request types for ${customer.name}`}
+    >
+      <div className="w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+        <FormPanel
+          title={`Field Services — ${customer.name}`}
+          subtitle="Choose whether this customer can raise all enabled FSM request types or only a specific subset."
+          icon={Wrench}
+          actions={<SecondaryButton icon={X} onClick={onClose}>Close</SecondaryButton>}
+        >
+          {err && <FormAlert>{err}</FormAlert>}
+
+          {availableTypes.length === 0 && (
+            <FormAlert tone="warning">
+              No Field Service catalogue request types are enabled for Customer Portal yet. Load or enable them in{' '}
+              <Link href="/service-tickets/catalog" className="underline font-semibold">
+                Field Service Management → Service Catalog &amp; SLA
+              </Link>
+              .
+            </FormAlert>
+          )}
+
+          {/* Mode Selector */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+            <label
+              className={`flex items-start gap-2.5 rounded-xl border p-3 cursor-pointer transition-colors ${
+                mode === 'all'
+                  ? 'border-emerald-500/50 bg-emerald-500/10'
+                  : 'border-[var(--border-subtle)] bg-[var(--bg-surface)] hover:bg-[var(--bg-surface-hover)]'
+              }`}
+            >
+              <input
+                type="radio"
+                name="fsm-scope-mode"
+                checked={mode === 'all'}
+                onChange={() => { setMode('all'); setErr(null); }}
+                className="mt-0.5 accent-emerald-600"
+              />
+              <div>
+                <p className="text-xs font-bold">All enabled FSM types ({availableTypes.length})</p>
+                <p className="text-[11px] text-[var(--text-muted)]">
+                  Customer automatically sees every enabled request type from your Service Catalog &amp; SLA.
+                </p>
+              </div>
+            </label>
+
+            <label
+              className={`flex items-start gap-2.5 rounded-xl border p-3 cursor-pointer transition-colors ${
+                mode === 'selected'
+                  ? 'border-violet-500/50 bg-violet-500/10'
+                  : 'border-[var(--border-subtle)] bg-[var(--bg-surface)] hover:bg-[var(--bg-surface-hover)]'
+              }`}
+            >
+              <input
+                type="radio"
+                name="fsm-scope-mode"
+                checked={mode === 'selected'}
+                onChange={() => {
+                  setMode('selected');
+                  if (picked.length === 0 && availableTypes.length > 0) {
+                    setPicked(availableTypes.map((t) => t.key));
+                  }
+                  setErr(null);
+                }}
+                className="mt-0.5 accent-violet-600"
+              />
+              <div>
+                <p className="text-xs font-bold">Specific request types only</p>
+                <p className="text-[11px] text-[var(--text-muted)]">
+                  Restrict this customer to a chosen subset of Field Service request types.
+                </p>
+              </div>
+            </label>
+          </div>
+
+          {mode === 'selected' && availableTypes.length > 0 && (
+            <div className="space-y-3">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div className="relative flex-1 min-w-[200px]">
+                  <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-[var(--text-muted)]" />
+                  <TextInput
+                    value={search}
+                    onChange={(e) => setSearch(e.target.value)}
+                    placeholder="Filter request types or categories…"
+                    className="!pl-8 !py-1.5 !text-xs"
+                  />
+                </div>
+                <div className="flex items-center gap-2 text-[11px]">
+                  <span className="font-semibold text-violet-700 dark:text-violet-300">
+                    {picked.length} selected
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setPicked(availableTypes.map((t) => t.key))}
+                    className="font-semibold text-blue-600 hover:underline"
+                  >
+                    Select all
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setPicked([])}
+                    className="font-semibold text-[var(--text-muted)] hover:underline"
+                  >
+                    Clear
+                  </button>
+                </div>
+              </div>
+
+              <div className="max-h-72 overflow-y-auto space-y-3 pr-1">
+                {grouped.map(([catName, items]) => {
+                  const catKeys = items.map((i) => i.key);
+                  const allChecked = catKeys.every((k) => picked.includes(k));
+                  return (
+                    <div key={catName} className="rounded-xl border border-[var(--border-subtle)] p-3 space-y-2">
+                      <div className="flex items-center justify-between gap-2">
+                        <p className="text-[11px] font-bold uppercase tracking-wide text-[var(--text-muted)]">
+                          {catName} ({items.filter((i) => picked.includes(i.key)).length}/{items.length})
+                        </p>
+                        <button
+                          type="button"
+                          onClick={() => toggleGroup(catKeys)}
+                          className="text-[10px] font-semibold text-violet-600 dark:text-violet-300 hover:underline"
+                        >
+                          {allChecked ? 'Clear group' : 'Select group'}
+                        </button>
+                      </div>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
+                        {items.map((t) => (
+                          <label
+                            key={t.key}
+                            className="flex items-center gap-2 rounded-lg border border-[var(--border-subtle)] px-2.5 py-1.5 text-xs cursor-pointer hover:bg-[var(--bg-surface-hover)]"
+                          >
+                            <input
+                              type="checkbox"
+                              checked={picked.includes(t.key)}
+                              onChange={() => flip(t.key)}
+                              className="rounded border-[var(--border-subtle)] text-violet-600 focus:ring-0"
+                            />
+                            <span className="truncate font-medium flex-1" title={t.name}>{t.name}</span>
+                            <span className="text-[10px] text-[var(--text-muted)] shrink-0">{t.priority}</span>
+                          </label>
+                        ))}
+                      </div>
+                    </div>
+                  );
+                })}
+                {grouped.length === 0 && (
+                  <p className="text-xs text-[var(--text-muted)] text-center py-4">No request types match &quot;{search}&quot;.</p>
+                )}
+              </div>
+
+              {legacyRemoved.length > 0 && (
+                <p className="text-[11px] text-amber-600">
+                  {legacyRemoved.length} previously assigned type(s) are disabled or removed from the tenant catalogue ({legacyRemoved.join(', ')}).
+                </p>
+              )}
+            </div>
+          )}
+
+          <FormFooter secondary={<SecondaryButton onClick={onClose}>Cancel</SecondaryButton>}>
+            <PrimaryButton icon={Save} busy={busy} onClick={() => void save()}>Save</PrimaryButton>
+          </FormFooter>
+        </FormPanel>
+      </div>
     </div>
   );
 }

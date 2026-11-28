@@ -12,7 +12,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import {
-  ListTree, Plus, Pencil, Trash2, ChevronLeft, Download, X, Check, AlertCircle, Info,
+  ListTree, Plus, Pencil, Trash2, ChevronLeft, Download, X, Check, AlertCircle, Info, KeyRound,
 } from 'lucide-react';
 import { PageHeader } from '@/components/ui/page-theme';
 import SmartDataGrid, { type SmartDataGridColumn, type KpiTile } from '@/components/ui/SmartDataGrid';
@@ -26,7 +26,7 @@ interface CatalogSla { responseHours: number | null; onSiteHours: number | null;
 interface CatalogType {
   id: string; key: string; name: string; categoryId: string; priority: TicketPriority;
   trigger: string | null; prefix: string; sortOrder: number; sla: CatalogSla;
-  approvalRequired: boolean; vehicleUsage: string;
+  approvalRequired: boolean; vehicleUsage: string; enabled: boolean;
 }
 interface CatalogCategory { id: string; key: string; name: string; description: string | null; sortOrder: number; types: CatalogType[] }
 interface CatalogResponse {
@@ -130,17 +130,50 @@ export default function ServiceCatalogPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  const toggleType = useCallback((r: Row) => {
+    const next = !r.enabled;
+    void run(
+      () => post({ action: 'toggleType', id: r.id, enabled: next }),
+      `${next ? 'Enabled' : 'Disabled'} ${r.name} for staff & Customer Portal.`,
+    );
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const columns = useMemo<SmartDataGridColumn<Row>[]>(() => [
     {
       key: 'category', header: 'Service category', filter: 'select', accessor: (r) => r.categoryName,
-      render: (r) => <span className="text-xs text-slate-300 whitespace-nowrap">{r.categoryName}</span>,
+      render: (r) => <span className={`text-xs whitespace-nowrap ${r.enabled ? 'text-slate-300' : 'text-slate-500'}`}>{r.categoryName}</span>,
     },
     {
       key: 'name', header: 'Service type', accessor: (r) => r.name,
       render: (r) => (
-        <div className="min-w-[220px]">
-          <div className="text-sm font-semibold text-white">{r.name}</div>
+        <div className={`min-w-[220px] ${r.enabled ? '' : 'opacity-60'}`}>
+          <div className={`text-sm font-semibold text-white ${r.enabled ? '' : 'line-through'}`}>{r.name}</div>
           {r.prefix && <div className="text-[10px] font-mono text-slate-500">Request prefix {r.prefix}</div>}
+        </div>
+      ),
+    },
+    {
+      key: 'status', header: 'Status', filter: 'select', selectOptions: ['Enabled', 'Disabled'], align: 'center',
+      accessor: (r) => (r.enabled ? 'Enabled' : 'Disabled'),
+      render: (r) => (
+        <div onClick={(e) => e.stopPropagation()} className="inline-flex justify-center">
+          <button
+            type="button"
+            role="switch"
+            aria-checked={r.enabled}
+            aria-label={`${r.enabled ? 'Disable' : 'Enable'} ${r.name}`}
+            disabled={!canEdit || busy}
+            onClick={() => toggleType(r)}
+            className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold border transition-colors whitespace-nowrap disabled:opacity-60 ${
+              r.enabled
+                ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40 hover:bg-emerald-500/30'
+                : 'bg-rose-500/15 text-rose-300 border-rose-500/35 hover:bg-rose-500/25'
+            }`}
+          >
+            <span className={`w-1.5 h-1.5 rounded-full ${r.enabled ? 'bg-emerald-400' : 'bg-rose-400'}`} />
+            {r.enabled ? 'Enabled' : 'Disabled'}
+          </button>
         </div>
       ),
     },
@@ -201,31 +234,38 @@ export default function ServiceCatalogPage() {
         </div>
       ),
     }] : []),
-  ], [canEdit, deleteType]);
+  ], [busy, canEdit, deleteType, toggleType]);
 
   // Until the first load lands, counts show "—" rather than a misleading 0.
   const loaded = data !== null;
+  const enabledTypes = useMemo(
+    () => categories.reduce((n, c) => n + c.types.filter((t) => t.enabled).length, 0),
+    [categories],
+  );
   const kpis: KpiTile[] = useMemo(() => [
     { label: 'Service categories', value: loaded ? categories.length : '—', accent: 'violet' },
-    { label: 'Service types', value: loaded ? totalTypes : '—', accent: 'sky' },
+    { label: 'Enabled / total types', value: loaded ? `${enabledTypes} / ${totalTypes}` : '—', accent: 'sky' },
     ...PRIORITY_TIERS.map((p) => ({
       label: p.label,
       value: loaded ? categories.reduce((n, c) => n + c.types.filter((t) => t.priority === p.priority).length, 0) : '—',
       accent: (p.tier === 'P1' ? 'rose' : p.tier === 'P2' ? 'amber' : p.tier === 'P3' ? 'sky' : 'emerald') as KpiTile['accent'],
     })),
-  ], [categories, totalTypes, loaded]);
+  ], [categories, enabledTypes, totalTypes, loaded]);
 
   return (
     <div className="space-y-6 max-w-7xl">
       <PageHeader
         title="Service Catalog & SLA"
-        subtitle="Service categories, the service types under each, and each type's priority and SLA timers. New requests take their priority and SLA from here."
+        subtitle="Service categories, request types, priorities, SLA timers, and tenant-wide Enable/Disable toggles (applies to both Staff Tickets & Customer Portal)."
         icon={ListTree}
         accent="violet"
         actions={
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <Link href="/service-tickets" className={btnGhost}>
               <ChevronLeft className="w-3.5 h-3.5" /> Field Service Management
+            </Link>
+            <Link href="/customer-mgmt/portal-access" className={btnGhost}>
+              <KeyRound className="w-3.5 h-3.5" /> Customer Portal access
             </Link>
             {canEdit && (
               <button type="button" onClick={installStandard} disabled={busy} className={btnGhost}>

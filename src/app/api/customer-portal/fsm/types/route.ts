@@ -10,14 +10,20 @@ export const dynamic = 'force-dynamic';
 
 import { NextRequest, NextResponse } from 'next/server';
 import { requireCustomerPortal } from '@/lib/customer-portal/session';
+import { customerAllowedFsmTypes } from '@/lib/customer-portal/users';
+import { filterAllowedFsmTypes } from '@/lib/customer-portal/fsm-types';
 import { loadRequestTypes } from '@/lib/service-tickets/request-types';
 import { REQUEST_CHANNELS, ENTITLEMENT_TYPES } from '@/lib/service-tickets/customer-context';
 
 export async function GET(req: NextRequest) {
   const ctx = await requireCustomerPortal(req, { portal: 'FSM' });
   if (ctx instanceof NextResponse) return ctx;
-  const { formFields, typeConfig } = await loadRequestTypes(ctx.tenantId);
-  const allowed = Object.entries(typeConfig).filter(([, c]) => c.catalogSla && !c.vehicleRequired);
+  const [{ formFields, typeConfig }, customerWhitelist] = await Promise.all([
+    loadRequestTypes(ctx.tenantId),
+    customerAllowedFsmTypes(ctx.tenantId, ctx.customerId),
+  ]);
+  const eligible = Object.entries(typeConfig).filter(([, c]) => c.catalogSla && !c.vehicleRequired);
+  const allowed = filterAllowedFsmTypes(eligible, customerWhitelist);
   return NextResponse.json({
     ok: true,
     typeConfig: Object.fromEntries(allowed),

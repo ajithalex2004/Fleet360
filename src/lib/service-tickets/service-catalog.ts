@@ -27,6 +27,7 @@ import {
   type ApprovalRules, type RuleCategory, type SlaRules, type TicketingRules, type VehicleRules,
 } from '@/types/service-rules';
 import type { TicketPriority } from '@/types/service-tickets';
+import { getTenantAccessMatrix, setTenantTypeAccess } from './access';
 import { PRIORITY_TIERS } from './priority-tiers';
 
 export const CATALOG_CATEGORY_PREFIX = 'FSM_';
@@ -59,6 +60,8 @@ export interface CatalogType {
   /** New requests start in Awaiting Approval (no emergency bypass). */
   approvalRequired: boolean;
   vehicleUsage: string;
+  /** Tenant-level toggle in `tenant_ticket_types` (default true). Controls both Staff & Customer Portal. */
+  enabled: boolean;
 }
 
 export interface CatalogCategory {
@@ -321,30 +324,34 @@ export async function listServiceCatalog(tenantId: string): Promise<CatalogCateg
   );
   if (cats.length === 0) return [];
 
-  const types = await prisma.$queryRawUnsafe<Array<{
-    id: string; key: string; name: string; category_id: string; default_priority: string;
-    description: string | null; sort_order: number; sla: Record<string, unknown> | null; ticketing: Record<string, unknown> | null;
-    approval: Record<string, unknown> | null; vehicle: Record<string, unknown> | null;
-  }>>(
-    `SELECT st.id::text, st.key, st.name, st.category_id::text, st.default_priority, st.description, st.sort_order,
-            (SELECT r.rules FROM service_rules r
-              WHERE r.service_type_id = st.id AND r.category = 'sla' AND r.scope_id = $2::uuid AND r.effective_to IS NULL
-              ORDER BY r.effective_from DESC LIMIT 1) AS sla,
-            (SELECT r.rules FROM service_rules r
-              WHERE r.service_type_id = st.id AND r.category = 'ticketing' AND r.scope_id = $2::uuid AND r.effective_to IS NULL
-              ORDER BY r.effective_from DESC LIMIT 1) AS ticketing,
-            (SELECT r.rules FROM service_rules r
-              WHERE r.service_type_id = st.id AND r.category = 'approval' AND r.scope_id = $2::uuid AND r.effective_to IS NULL
-              ORDER BY r.effective_from DESC LIMIT 1) AS approval,
-            (SELECT r.rules FROM service_rules r
-              WHERE r.service_type_id = st.id AND r.category = 'vehicle' AND r.scope_id = $2::uuid AND r.effective_to IS NULL
-              ORDER BY r.effective_from DESC LIMIT 1) AS vehicle
-       FROM service_types st
-      WHERE st.tenant_id = $1 AND st.deleted_at IS NULL
-        AND st.category_id = ANY($3::uuid[])
-      ORDER BY st.sort_order, st.name`,
-    tenantId, rootScopeId, cats.map((c) => c.id),
-  );
+  const [types, accessMatrix] = await Promise.all([
+    prisma.$queryRawUnsafe<Array<{
+      id: string; key: string; name: string; category_id: string; default_priority: string;
+      description: string | null; sort_order: number; sla: Record<string, unknown> | null; ticketing: Record<string, unknown> | null;
+      approval: Record<string, unknown> | null; vehicle: Record<string, unknown> | null;
+    }>>(
+      `SELECT st.id::text, st.key, st.name, st.category_id::text, st.default_priority, st.description, st.sort_order,
+              (SELECT r.rules FROM service_rules r
+                WHERE r.service_type_id = st.id AND r.category = 'sla' AND r.scope_id = $2::uuid AND r.effective_to IS NULL
+                ORDER BY r.effective_from DESC LIMIT 1) AS sla,
+              (SELECT r.rules FROM service_rules r
+                WHERE r.service_type_id = st.id AND r.category = 'ticketing' AND r.scope_id = $2::uuid AND r.effective_to IS NULL
+                ORDER BY r.effective_from DESC LIMIT 1) AS ticketing,
+              (SELECT r.rules FROM service_rules r
+                WHERE r.service_type_id = st.id AND r.category = 'approval' AND r.scope_id = $2::uuid AND r.effective_to IS NULL
+                ORDER BY r.effective_from DESC LIMIT 1) AS approval,
+              (SELECT r.rules FROM service_rules r
+                WHERE r.service_type_id = st.id AND r.category = 'vehicle' AND r.scope_id = $2::uuid AND r.effective_to IS NULL
+                ORDER BY r.effective_from DESC LIMIT 1) AS vehicle
+         FROM service_types st
+        WHERE st.tenant_id = $1 AND st.deleted_at IS NULL
+          AND st.category_id = ANY($3::uuid[])
+        ORDER BY st.sort_order, st.name`,
+      tenantId, rootScopeId, cats.map((c) => c.id),
+    ),
+    getTenantAccessMatrix(tenantId),
+  ]);
+  const disabledKeys = new Set(accessMatrix.filter((m) => !m.enabled).map((m) => m.ticketType));
 
   const byCat = new Map<string, CatalogType[]>();
   for (const r of types) {
@@ -361,6 +368,7 @@ export async function listServiceCatalog(tenantId: string): Promise<CatalogCateg
       },
       approvalRequired: r.approval?.approvalRequired === true,
       vehicleUsage: firstUsage(r.vehicle?.vehicleUsage) ?? FSM_DEFAULT_VEHICLE_USAGE,
+      enabled: !disabledKeys.has(r.key),
     };
     const list = byCat.get(r.category_id) ?? [];
     list.push(entry);
@@ -551,6 +559,20 @@ export async function deleteType(tenantId: string, id: string): Promise<string> 
     id, tenantId,
   );
   return row.name;
+}
+
+/** Enables or disables one FSM catalogue type for the tenant (controls Staff Tickets & Customer Portal). */
+export async function setCatalogTypeEnabled(
+  tenantId: string,
+  id: string,
+  enabled: boolean,
+  by: string | null,
+): Promise<{ key: string; name: string; enabled: boolean }> {
+  const row = await getTypeRow(tenantId, id);
+  const matrix = await getTenantAccessMatrix(tenantId);
+  const existing = matrix.find((m) => m.ticketType === row.key);
+  await setTenantTypeAccess(tenantId, row.key, enabled, existing?.slaOverrideHours ?? null, by);
+  return { key: row.key, name: row.name, enabled };
 }
 
 // ── Standard catalogue install ─────────────────────────────────────────────────
